@@ -1,0 +1,163 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!--
+Design by Free CSS Templates
+http://www.freecsstemplates.org
+Released for free under a Creative Commons Attribution 2.5 License
+
+Name       : Plain Office
+Description: A two-column, fixed-width blog design.
+Version    : 1.0
+Released   : 20071001
+
+-->
+<html xmlns="http://www.w3.org/1999/xhtml"> 
+<head>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<title>{{settings.title}}</title>
+<meta content="" name="keywords"/>
+<meta content="" name="description"/>
+<link type="text/css" rel="stylesheet" href="/static/styles/default.css"/>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.min.js"></script>
+<script type="text/javascript" src="/static/js/jquery.blockUI.js"></script>
+<script type="text/javascript">
+String.prototype.format = function () {
+    var args = arguments;
+    return this.replace(/\{(\d+)\}/g, function (m, n) { return args[n]; });
+};
+String.prototype.escape = function () {
+    var args = arguments;
+    return this.replace(/</g, '').replace(/>/g, '');
+};
+formatutc = function(date, format){
+    /*
+     * eg:format="yyyy-MM-dd hh:mm:ss";
+     */
+    localDate = date - (date.getTimezoneOffset() * 60);
+    localDate = new Date(localDate);
+    var o = {
+        "M+" :  localDate.getMonth()+1,  //month
+        "d+" :  localDate.getDate(),     //day
+        "h+" :  localDate.getHours(),    //hour
+        "m+" :  localDate.getMinutes(),  //minute
+        "s+" :  localDate.getSeconds(), //second
+        "q+" :  Math.floor((localDate.getMonth()+3)/3),  //quarter
+        "S"  :  localDate.getMilliseconds() //millisecond
+    }
+
+    if(/(y+)/.test(format)) {
+        format = format.replace(RegExp.$1, (localDate.getFullYear()+"").substr(4 - RegExp.$1.length));
+    }
+
+    for(var k in o) {
+        if(new RegExp("("+ k +")").test(format)) {
+            format = format.replace(RegExp.$1, RegExp.$1.length==1 ? o[k] : ("00"+ o[k]).substr((""+ o[k]).length));
+        }
+    }
+    return format;
+};
+$(document).ready(function() {
+{% if users.is_admin %}
+    $('#btncreate').click(function() {
+        $.blockUI({ message: $('#create_album')});
+    });
+    $('#cancel').click(function() {
+        $.unblockUI();
+    });
+    $('#create').click(function() {
+        $.post('/admin/ajax/',
+                {'action': 'create_album',
+                 'name': $('#new_name').val(),
+                 'public': $('#new_public').attr('checked'),
+                 'description': $('#new_description').val()
+                },
+                function(res){
+                    if (res.status=='ok') {
+                        window.location.reload();
+                        $.unblockUI();
+                    } else{
+                        alert('error: '+res.error);
+                    }
+                }, "json");
+    });
+{% endif %}
+});
+</script>
+{% block head_ex %} {% endblock %}
+</head>
+<body>
+<!-- start header -->
+<div id="logo">
+    <h1><a href="/">{{settings.title}}</a></h1>
+    <div id="subtitle"> {{settings.description}}</div>
+    <div id="admin_search">
+    <div id="admin">
+            <a href="/?lang=zh-cn">中文版</a> | <a href="/?lang=en-us">English Version</a> |
+        {% if users.is_owner %}
+            <a href="/admin/settings/">{{ _('Admin')}}</a> |
+        {% endif %}
+        {% if users.cur_user %}
+            <a href="/logout/">{{ _('Logout')}}</a>
+        {% else %}
+            <a href="/login/">{{ _("Login") }}</a>
+        {% endif %}
+    </div>
+    </div>
+</div>
+<div id="menu">
+   <div id="navigation">
+       <ul>
+        <li>
+		  <a href="/">{{ _('All Albums') }}</a>
+		</li> 
+        {% if album %}
+        <li>&gt;&gt;</li>
+        <li><a href="/{{album.name}}/">{{album.name}}</a> </li>
+        {% endif %}
+        {% if photo %}
+        <li>&gt;&gt;</li>
+        <li><a href="/{{album.name}}/{{photo.name}}">{{photo.name}}</a> </li>
+        {% endif %}
+        {% block ex_navigation %} {% endblock %}
+       </ul>
+   </div>
+
+   <div id="commandbar">
+       <ul>
+       {% if users.is_admin %}
+        <li><a href="/admin/upload/">Add Photos</a></li>
+       {% endif %}
+       {% if users.is_admin %}
+           <li>|</li>
+           <li><a id="btncreate" href="javascript:void(0);">Create Album</a></li>
+       {% endif %}
+       {% block commandbar %}
+       {% endblock %}
+       </ul>
+	</div>
+   
+</div>
+<!-- end header -->
+<!-- start page -->
+<div id="page">
+{% block page %}{% endblock %}
+</div>
+<!-- end page -->
+<div style="clear: both;"></div>
+<div id="footer">
+    <p>Powered by  <a href="http://code.google.com/p/gaephotos/">GAEPhotos</a>. Theme by <a href="http://www.freecsstemplates.org/">Free CSS Templates</a>.</p>
+</div>
+{% if users.is_admin %}
+<div id="create_album" style="display:none; cursor: default;">
+    <h1>{{ _("Create Album") }}</h1>
+    <p>{{ _("album name") }}:
+        <input id="new_name" name="new_name" type="text" size="18" value=""/>
+        <input id="new_public" type="radio" name="new_public" value="true" checked>{{ _("public") }}</input>
+        <input type="radio" name="new_public" value="false">{{ _("private") }}</input></p>
+    <p>{{ _("description") }}:
+        <input id="new_description" name="new_description" type="text" size="30" value=""/></p>
+    <p><input id="create" type="submit" value="{{ _('Create Album') }}" name="createalbum">
+        <input id="cancel" type="submit" value="{{ _('Cancel') }}" name="createalbum"></p>
+</div>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block head_ex %}
+<script type="text/javascript">
+    var last_page = Number.MAX_VALUE;
+    var cur_page = 0;
+    var loaded_pages = [0];
+    var albums_cursor = "{{ albums_cursor }}";
+    $(document).ready(function() {
+        function refresh_pager() {
+            cur_page < last_page ? $("#old_albums").show() : $("#old_albums").hide();
+            cur_page > 0 ? $("#new_albums").show() : $("#new_albums").hide();
+            $.growlUI("Page "+(cur_page+1), "");
+        }
+        refresh_pager();
+
+        $("#new_albums").hover(function(){
+            $(this).toggleClass("hover");
+        });
+        $("#new_albums").click(function(){
+            $("#content li[name='album'][page='"+cur_page+"']").hide();
+            cur_page>0 ? cur_page-- : 0;
+            $("#content li[name='album'][page='"+cur_page+"']").fadeIn(1000);
+            refresh_pager();
+        });
+
+        $("#old_albums").hover(function(){
+            $(this).toggleClass("hover");
+        });
+        $("#old_albums").click(function(){
+            if ($.inArray(cur_page+1, loaded_pages) != -1){
+                $("#content li[name='album'][page='"+cur_page+"']").hide();
+                cur_page++;
+                $("#content li[name='album'][page='"+cur_page+"']").fadeIn(1000);
+                refresh_pager();
+            } else {
+                $("#page").block({ message: $('#loading')});
+                $.post('/admin/ajax/',
+                        {'action': 'get_all_albums',
+                         'albums_cursor': albums_cursor,
+                         'pagesize': {{ settings.albums_per_page }}
+                        },
+                        function(res){
+                            $("#page").unblock();
+                            if (res.status=='ok') {
+                                albums_cursor = res.cursor;
+
+                                if (res.albums.length > 0){
+                                    cur_page++;
+                                    loaded_pages.splice(0,0,cur_page);
+                                    build_albums(res.albums, cur_page);
+                                    if( res.is_last_page ) { last_page = cur_page};
+                                }
+                                else{
+                                    last_page = cur_page;
+                                }
+                                refresh_pager();
+                                {% if users.is_admin %}
+                                bind_ajax_actions();
+                                {% endif %}
+                            } else{
+                                alert('error: '+res.error);
+                            }
+                        }, "json");
+            }
+        });
+
+        function _insert_album(album, page){
+            var album_li = $('<li name="album" style="display:none"><div id="album"></div>' +
+                    {% if users.is_owner %}'<a class="close">x</a>' + {% endif %}
+                    '</li>');
+            album_li.attr("album", album.name).attr("page", page);
+            $("#content").append(album_li);
+
+            $("div#album",album_li).append($('<div><a href="/{0}/">{0}({1})</a> {2}</div>'.format(album.name,
+                    album.photocount, album.public?"":"private" )));
+            $("div#album",album_li).append($( ('<div>{0}</div>' +
+                    '<div id="cover"><a href="/{1}/"><img src="{2}"/></a></div>' +
+                    '<div class="description">{3}</div>' +
+                    '<textarea class="edit_description" rows="2" style="display: none;">{3}</textarea>').format(
+                    formatutc(new Date(album.createdate), 'yyyy-MM-dd'), album.name.escape(),
+                    album.cover_url, album.description.escape() )));
+            album_li.fadeIn(1000);
+        }
+        function build_albums(albums, page) {
+            $("#content li[name='album']").hide();
+            var count = albums.length;
+            for(var i=0; i<count; i++){
+                _insert_album(albums[i], page);
+            }
+        }
+        {% if users.is_admin %}
+        function bind_ajax_actions(){
+            $(".description").each(function(){
+                $(this).unbind("click");
+                $(this).click(function(){
+                    $(this).hide();
+                    $(this).next().show();
+                    $(this).next().focus();
+                });
+                $(this).next().unbind("focusout");
+                $(this).next().focusout(function(){
+                    var ed_desp = $(this);
+                    if (ed_desp.val().trim() != ed_desp.prev().text().replace("&nbsp;",'').trim())
+                    { //update album description
+                        $.post('/admin/ajax/',
+                                {'action': 'save_album',
+                                    'name': ed_desp.parent().parent().attr("album"),
+                                    'description': ed_desp.val()
+                                },
+                                function(res){
+                                    if (res.status=='ok') {
+                                        ed_desp.hide();
+                                        ed_desp.prev().text(ed_desp.val());
+                                        ed_desp.prev().show();
+                                    } else{
+                                        alert('error: '+res.error);
+                                    }
+                                }, "json");
+                    } else {
+                        ed_desp.hide();
+                        ed_desp.prev().show();
+                    }
+                });
+            });
+            {% if users.is_owner %}
+            $(".close").each(function(){
+                $(this).unbind("click");
+                $(this).click(function(){
+                    var close = $(this);
+                    if(! confirm('{{ _("Are you seriously delete this album?")}}'))
+                    {
+                        return false;
+                    }
+                    $("#page").block({message: '<h1>{{ _("Delete album...") }}</h1>' });
+                    $.post('/admin/ajax/',
+                            {'action': 'delete_album',
+                             'album_name': close.parent().attr("album")
+                            },
+                            function(res){
+                                if (res.status=='ok') {
+                                    $.growlUI('{{ _("Album Deleted") }}', "");
+                                    close.parent().remove();
+                                } else{
+                                    alert('error: '+res.error);
+                                }
+                                $("#page").unblock();
+                            }, "json");
+                });
+            });
+            {% endif %}
+        }
+        bind_ajax_actions();
+        {% endif %}
+    });
+</script>
+{% endblock %}
+{% block page %}
+    {% if users.is_admin %}
+        <div id="tips">{{ _("Tips: DragAndDrop photos into Album to Upload(Firefox/Chrome)") }}</div>
+        <div style="clear: both;"></div>
+    {% endif %}
+    <table id="index">
+    <tr>
+        <td id="new_albums">
+            <img src="/static/images/left_arrows.jpg" alt="<<"/>
+        </td>
+        <td>
+            <!-- start content -->
+            <div id="content">
+                {% for album in albums %}
+                    <li name="album" album="{{album.name}}" page="0">
+                        <div id="album">
+                            <div><a href="/{{album.name}}/">{{album.name}}({{album.photocount}})</a>
+                                {% if not album.public %} ({{ _("private") }}) {% endif %}
+                            </div>
+                            <div>{{album.updatedate|date}}</div>
+                            <div id="cover"><a href="/{{album.name}}/"><img src="{{ album.cover_url }}"/></a></div>
+                            <div class="description">{{album.description}}</div>
+                            <textarea class="edit_description" rows="2" style="display: none;">{{album.description}}</textarea>
+                        </div>
+                        {% if users.is_owner %}<a class="close">x</a>{% endif %}
+                    </li>
+                {% endfor %}
+            </div>
+            <!-- end content -->
+        </td>
+        {% if not is_last_page %}
+        <td id="old_albums">
+            <img src="/static/images/right_arrows.jpg" alt=">>"/>
+        </td>
+        {% endif %}
+    </tr></table>
+    <div style="clear: both;"></div>
+    <div id="loading" style="display:none"><img src="/static/images/loading.gif" alt="loading..."/></div>
+{% endblock %}

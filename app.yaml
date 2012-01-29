@@ -1,0 +1,20 @@
+﻿application: gaephotos
+version: 2
+runtime: python27
+api_version: 1
+threadsafe: true
+
+libraries:
+- name: jinja2
+  version: "2.6"
+
+handlers:
+- url: /favicon.ico
+  static_files: static/images/favicon.ico
+  upload: static/images/favicon.ico
+  
+- url: /static
+  static_dir: static
+
+- url: /.*
+  script: main.app

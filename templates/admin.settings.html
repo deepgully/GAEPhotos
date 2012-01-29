@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block head_ex %}
+<script type="text/javascript" src="/static/js/jquery.blockUI.js"></script>
+<script type="text/javascript">
+$(document).ready(function() {
+
+});              
+</script>
+{% endblock %}
+
+ 
+{% block page %}
+	<form method="post" id="settings_form">
+	<table id="admin_table">
+	    <tr>
+            <th scope="row">{{ _("Site Title") }}:</th>
+            <td><input id="title" name="title" type="text" size="45" value="{{settings.title}}"/>
+            </td>
+        </tr>
+		<tr>
+            <th scope="row">{{ _("Site Description") }}:</th>
+            <td><input id="description"  name="description" type="text" size="45" value="{{settings.description}}"/>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">{{ _("Albums per page") }}:</th>
+            <td><input id="albums_per_page" name="albums_per_page" type="text" size="20" value="{{settings.albums_per_page}}"/>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">{{ _("Thumbs per page") }}:</th>
+            <td><input id="thumbs_per_page" name="thumbs_per_page" type="text" size="20" value="{{settings.thumbs_per_page}}"/>
+            </td>
+       </tr>
+       <tr>
+            <th scope="row">{{ _("Latest Photos Count") }}:</th>
+            <td><input id="latest_photos_count" name="latest_photos_count" type="text" size="20" value="{{settings.latest_photos_count}}"/>
+            </td>
+       </tr>
+       <tr>
+            <th scope="row">{{ _("Latest Comments Count") }}:</th>
+            <td><input id="latest_comments_count" name="latest_comments_count" type="text" size="20" value="{{settings.latest_comments_count}}"/>
+            </td>
+       </tr>
+       <tr>
+            <th scope="row">{{ _("Max Upload Size") }}(M):</th>
+            <td><input id="max_upload_size" name="max_upload_size" type="text" size="20" value="{{settings.max_upload_size}}"/>
+            </td>
+       </tr>
+       <tr>
+            <th scope="row">{{ _("Admins") }}:</th>
+            <td><textarea id="adminlist" name="adminlist" wrap="soft" rows="3" cols="25">{{settings.adminlist|join(',')}}</textarea>
+                ({{ _('split by ,') }})</td>
+       </tr>
+       <tr>
+            <th scope="row"></th>
+            <td>
+            <input id="save" type="submit" value="{{ _('Save Settings') }}" name="save"/>
+            <input id="default" type="submit" value="{{ _('Reset Settings') }}" name="default"/>
+            </td>
+       </tr>
+	</table>
+	</form>
+	<div id="settings_logo">GAE Photos</div>
+	<div style="clear: both;">&nbsp;</div>
+{% endblock %}

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block head_ex %}
+<script type="text/javascript">
+    var last_page = {{ last_page }};
+    var cur_page = {{ cur_page }};
+    var photo_per_page = {{ settings.thumbs_per_page }};
+    var loaded_pages = [0];
+    $(document).ready(function() {
+        function refresh_pager() {
+            cur_page < last_page ? $("#old_albums").show() : $("#old_albums").hide();
+            cur_page > 0 ? $("#new_albums").show() : $("#new_albums").hide();
+            $.growlUI("Page "+(cur_page+1), "");
+        }
+        refresh_pager();
+        $("#new_albums").hover(function(){
+            $(this).toggleClass("hover");
+        });
+        $("#old_albums").hover(function(){
+            $(this).toggleClass("hover");
+        });
+        $("#new_albums").click(function(){
+            $("#content div[name='thumb'][page='"+cur_page+"']").hide();
+            cur_page>0 ? cur_page-- : 0;
+            $("#content div[name='thumb'][page='"+cur_page+"']").fadeIn(1000);
+            refresh_pager();
+        });
+        $("#old_albums").click(function(){
+            if ($.inArray(cur_page+1, loaded_pages) != -1){
+                $("#content div[name='thumb'][page='"+cur_page+"']").hide();
+                cur_page++;
+                $("#content div[name='thumb'][page='"+cur_page+"']").fadeIn(1000);
+                refresh_pager();
+            } else {
+                $("#page").block({ message: $('#loading')});
+                $.post('/admin/ajax/',
+                        {'action': 'get_album_photos',
+                         'album_name': '{{ album.name }}',
+                         'start_index': (cur_page+1)*photo_per_page,
+                         'pagesize': photo_per_page
+                        },
+                        function(res){
+                            $("#page").unblock();
+                            if (res.status=='ok') {
+                                if (res.photos.length > 0){
+                                    cur_page++;
+                                    loaded_pages.splice(0,0,cur_page);
+                                    build_thumbs(res.photos, cur_page);
+                                }
+                                refresh_pager();
+                                {% if users.is_admin %}
+                                    bind_ajax_actions();
+                                {% endif %}
+                            } else{
+                                alert('error: '+res.error);
+                            }
+                        }, "json");
+            }
+        });
+        function build_thumbs(photos, page) {
+            $("#content div[name='thumb']").hide();
+            var count = photos.length;
+            for(var i=0; i<count; i++){
+                _insert_thumb(photos[i], page);
+            }
+        };
+        function _insert_thumb(photo, page){
+            var thumb_div = $('<div class="thumb" name="thumb"></div>');
+            thumb_div.attr("photo", photo.photo_name).attr("page", page);
+            thumb_div.append($('<a href="{0}" target="_blank"><img src="{1}"/></a>'.format(photo.url, photo.thumb_url)));
+        {% if users.is_admin %}
+            thumb_div.append($('<input class="selectedphotos"  value="{0}" type="checkbox"/>'.format(photo.photo_name)));
+        {% endif %}
+            thumb_div.append($('<div class="description">{0}</div>'.format(photo.description || "{{_('click to edit')}}")));
+            thumb_div.append($('<textarea class="edit_description" rows="2" style="display: none;">{0}</textarea>'.format(photo.description)));
+
+            $("#content").append(thumb_div);
+            thumb_div.fadeIn(1000);
+        };
+        {% if users.is_admin %}
+        function bind_ajax_actions(){
+            $(".description").each(function(){
+                $(this).unbind("click");
+                $(this).click(function(){
+                    $(this).hide();
+                    $(this).next().show();
+                    $(this).next().focus();
+                });
+                $(this).next().unbind("focusout");
+                $(this).next().focusout(function(){
+                    var ed_desp = $(this);
+                    if ( ed_desp.val().trim().length > 0 &&
+                            (ed_desp.val().trim() != ed_desp.prev().text().replace("/&nbsp;/",'').trim())){
+                        //update photo description
+                        $.post('/admin/ajax/',
+                                {'action': 'save_photo',
+                                 'photo_name': ed_desp.parent().attr("photo"),
+                                 'album_name': '{{ album.name }}',
+                                 'description': ed_desp.val()
+                                },
+                                function(res){
+                                    if (res.status=='ok') {
+                                        ed_desp.hide();
+                                        ed_desp.prev().text(ed_desp.val());
+                                        ed_desp.prev().show();
+                                    } else{
+                                        alert('error: '+res.error);
+                                    }
+                                }, "json");
+                    } else {
+                        ed_desp.hide();
+                        ed_desp.prev().show();
+                    }
+                });
+            });
+        };
+        bind_ajax_actions();
+        {% endif %}
+    });
+</script>
+{% endblock %}
+
+{% block commandbar %}
+        <li>|</li>
+        <li><a href="/slider/{{album.name}}/">{{ _("Slide Show") }}</a></li>
+		{% if users.is_admin %}
+        <li>|</li>
+        <li><a href="javascipt:void();" id="deleteselected">{{ _("Delete Selected") }}</a></li>
+        {% endif %}
+{% endblock %}
+   
+{% block page %}
+    <!-- start content -->
+    {% if users.is_admin %}
+    <div id="tips">{{ _("Tips: DragAndDrop photos into Album to Upload(Firefox/Chrome)") }}</div>
+    {% endif %}
+    <table id="index"><tr>
+        <td id="new_albums">
+            <img src="/static/images/left_arrows.jpg" alt="<<"/>
+        </td>
+        <td>
+            <div id="content">
+                {% if not photos %}
+                    {{ _("no photo found") }}
+                {% else %}
+                    {% for photo in photos %}
+                        <div class="thumb" name="thumb" photo="{{photo.photo_name}}" page="0">
+                            <a href="{{photo.url}}" target="_blank"><img src="{{ photo.thumb_url }}"/></a>
+                            {% if users.is_admin %}
+                                <input class="selectedphotos" value="{{photo.photo_name}}" type="checkbox"/>
+                            {% endif %}
+                            <div class="description">
+                                {{photo.description or _('click to edit')}}
+                            </div>
+                            <textarea class="edit_description" rows="2" style="display: none;">{{photo.description}}</textarea>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </td>
+        <td id="old_albums">
+            <img src="/static/images/right_arrows.jpg" alt="<<"/>
+        </td>
+    </tr></table>
+
+    {% if users.is_admin %}
+     <div id="deletequestion" style="display:none; cursor: default; color: red;">
+       <h1>{{ _('R you seriously delete selected photos?') }}</h1>
+       <input type="button" id="deleteno" value="{{ _('No, I just try the button')}}" />
+       <input type="button" id="deleteyes" value="{{ _('Yes, just delete it')}}" />
+    </div>
+    {% endif %}
+
+    <!-- end content -->
+<div style="clear: both;">&nbsp;</div>
+<div id="loading" style="display:none"><img src="/static/images/loading.gif" alt="loading..."/></div>
+{% endblock %}

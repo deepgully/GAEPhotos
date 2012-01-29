@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block head_ex %}
+<script type="text/javascript">
+    var file_uploaded = 0;
+    var file_total=0;
+    var album_name="";
+
+
+    function upload_files(){
+        var files = $("#filesToUpload")[0].files;
+
+        file_uploaded = 0;
+        file_total = files.length;
+        album_name = $("#albumsSelect").val();
+
+        reset_ui();
+        update_status();
+
+        $.each(files, function(index, f) {
+             if( add_file_to_queue(f) == true) {
+                 upload_file(f);
+             } else {
+                 file_uploaded++;
+                 update_status();
+             }
+        });
+    };
+
+    function reset_ui(){
+        $("#upload_files_container").empty();
+        $("#divStatus").html("");
+        $("#albumsSelect").attr("disabled", true);
+        $("#filesToUpload").attr("disabled", true);
+    }
+
+    function update_status(){
+        $("#divStatus").html( "[{0}/{1}]  {{ _('Photos are uploading to album') }} {2}".format(
+                file_uploaded, file_total, album_name) );
+        if(file_uploaded >= file_total){
+            $("#albumsSelect").removeAttr("disabled");
+            $("#filesToUpload").removeAttr("disabled");
+        }
+    }
+
+    function add_file_to_queue(f){
+        if (f.size/1000/1000 > {{ settings.max_upload_size }}){
+            $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1} M, {2}</li>'.format(
+                    f.name, (f.size/1000/1000).toFixed(2), '{{ _("size exceed") }}'));
+            return false;
+        } else {
+            $("#upload_files_container").append('<li name="{0}"> {0}, {1} M, {2}</li>'.format(
+                    f.name, (f.size/1000/1000).toFixed(2), '{{ _("uploading...") }}'));
+            return true;
+        }
+    };
+
+    function upload_file(f){
+        var uploadreader = new FileReader();
+        uploadreader.file = f;
+        uploadreader.onload = function(evt){
+            processXHR(evt.target.file, evt.target.result);
+        }
+        uploadreader.readAsBinaryString(f);
+    };
+
+    function processXHR(file, binary){
+        var file_uploader = $("#upload_files_container li[name='{0}']".format(file.name));
+        var progress_bar = $('<div class="progress">0%</div>');
+        progress_bar.height(file_uploader.outerHeight());
+        progress_bar.offset({top: file_uploader.offset().top,
+            left: file_uploader.offset().left});
+        file_uploader.parent().append(progress_bar);
+        progress_bar.show();
+
+        var xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener("progress", function(event) {
+            if (event.lengthComputable) {
+                var percentage = Math.round((event.loaded * 100) / event.total);
+                progress_bar.width(file_uploader.outerWidth() * percentage/100);
+                progress_bar.text(percentage+'%');
+                if (percentage >= 100) {
+                    progress_bar.text('{{ _("Done") }}');
+                }
+            }
+        }, false);
+        xhr.upload.addEventListener("error", function(error) {
+            window.console.log("error: " + error.code);
+            progress_bar.text('{{ _("Error") }} ' + error.code);
+            progress_bar.addClass("error");
+            file_uploaded++;
+            update_status();
+        }, false);
+
+
+        xhr.onreadystatechange = function (evt) {
+            if (xhr.readyState == 4) {
+                if(xhr.status == 200) {
+                    var resp = window.JSON.parse(xhr.responseText);
+                    if (resp.status=='ok'){
+                        file_uploader.html("{0}, {1} M, {2}".format(resp.file_name,
+                                (file.size/1000/1000).toFixed(2), '{{ _("Done") }}'));
+                    } else {
+                        progress_bar.text('{{ _("Error") }} ' + resp.error);
+                        progress_bar.addClass("error");
+                    }
+                } else {
+                    progress_bar.text('{{ _("Error") }} ' + xhr.status);
+                    progress_bar.addClass("error");
+                }
+                file_uploaded++;
+                update_status();
+            }
+        };
+
+        xhr.open("POST", "/admin/upload/");
+        xhr.overrideMimeType('text/plain; charset=x-user-defined-binary');
+        xhr.setRequestHeader('Content-Disposition',
+            '{"album_name":"{0}","file_name":"{1}"}'.format( album_name, file.name));
+        if(xhr.sendAsBinary) xhr.sendAsBinary(binary);
+        else xhr.send(file);
+    };
+</script>
+{% endblock %}
+
+{% block ex_navigation %}
+    <li>&gt;&gt;</li>
+    <li><a href="/admin/upload/">{{ _("Add Photos") }}</a></li>
+{% endblock %}
+
+{% block page %}
+{% if albums %}
+    <div id="div_selectphoto">{{ _("Select Album") }}:
+        <select id="albumsSelect">
+        {% for album in albums %}
+            <option value="{{album.name}}">{{album.name}}{% if not album.public %}({{_("private")}}){% endif %}</option>
+        {% endfor %}
+        </select>
+    </div>
+    <div id="div_button">
+        <input id="filesToUpload" type="file" multiple="true" accept="image/*" onchange="upload_files();"/>
+    </div>
+    <div id="divStatus"></div>
+    <div style="clear: both;"></div>
+    <div class="fieldset" id="fsUploadProgress">
+        <span class="legend">{{ _('Photos Queue') }}</span>
+        <div id="upload_files_container"></div>
+    </div>
+{% else %}
+    <a id="btncreate" href="javascript:void(0);">{{ _("Create Album") }}</a>
+{% endif %}
+<div style="clear: both;"></div>
+{% endblock %}
