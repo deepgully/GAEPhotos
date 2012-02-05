@@ -1,0 +1,14 @@
+<hr/>
+{% if latestphotos %}
+<fieldset id="latest_photo_container">
+<legend class="legend">{{ _("Latest Photos") }}</legend>
+<div>
+{% for photo in latestphotos %}
+<div id="latest_photo_thumb">
+<a href="/slider/{{photo.album_name}}/#{{photo.photo_name}}"><img src="/{{photo.album_name}}/{{photo.photo_name}}/thumb/"/></a>
+<div class="description2">{{photo.description}}</div>
+</div>
+{% endfor %}
+</div>
+</fieldset>
+{% endif %}

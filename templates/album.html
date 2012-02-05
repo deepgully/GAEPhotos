@@ -10,7 +10,7 @@
         function refresh_pager() {
             cur_page < last_page ? $("#old_albums").show() : $("#old_albums").hide();
             cur_page > 0 ? $("#new_albums").show() : $("#new_albums").hide();
-            $.growlUI("Page "+(cur_page+1), "");
+            $.growlUI("{{ _('Page {0}') }}".format(cur_page+1), "");
         }
         refresh_pager();
         $("#new_albums").hover(function(){
@@ -65,19 +65,88 @@
             }
         };
         function _insert_thumb(photo, page){
-            var thumb_div = $('<div class="thumb" name="thumb"></div>');
+            var thumb_div = $('<div class="mythumb" name="thumb"></div>');
             thumb_div.attr("photo", photo.photo_name).attr("page", page);
-            thumb_div.append($('<a href="{0}" target="_blank"><img src="{1}"/></a>'.format(photo.url, photo.thumb_url)));
+            thumb_div.append($('<a href="/slider/{0}/#{1}"><img src="{2}"/></a>'.format(photo.album_name,
+                    photo.photo_name, photo.thumb_url)));
         {% if users.is_admin %}
-            thumb_div.append($('<input class="selectedphotos"  value="{0}" type="checkbox"/>'.format(photo.photo_name)));
+            thumb_div.append($('<div style="clear: both;"></div><input class="selectedphotos" value="{0}" type="checkbox"/>'.format(photo.photo_name)));
         {% endif %}
+            {% if users.is_admin %}
             thumb_div.append($('<div class="description">{0}</div>'.format(photo.description || "{{_('click to edit')}}")));
+            {% else %}
+            thumb_div.append($('<div class="description">{0}</div>'.format(photo.description)));
+            {% endif %}
             thumb_div.append($('<textarea class="edit_description" rows="2" style="display: none;">{0}</textarea>'.format(photo.description)));
 
             $("#content").append(thumb_div);
             thumb_div.fadeIn(1000);
         };
         {% if users.is_admin %}
+        var get_selected_photos  = function() {
+            var selected_photos = new Array();
+            $.each($('.selectedphotos'), function() {
+                if ($(this).attr('checked')){
+                    selected_photos.push( $(this).val() );
+                }
+            });
+            return selected_photos;
+        };
+        $("#setcover").click(function(){
+            var selected_photos = get_selected_photos();
+            if (selected_photos.length == 0){
+                $.growlUI("{{ _('Please select photo') }}", "");
+                return;
+            }
+            $.post('/admin/ajax/',
+                {'action': 'set_cover_photo',
+                'photo_name': selected_photos[0],
+                'album_name': '{{ album.name }}'
+                },
+                function(res){
+                    if (res.status=='ok') {
+                        $.growlUI("{{ _('Cover Photo Set') }}", "");
+                    } else{
+                        alert('error: '+res.error);
+                    }
+                }, "json");
+        });
+        $("#deleteselected").click(function(){
+            var selected_photos = get_selected_photos();
+            if (selected_photos.length == 0){
+                $.growlUI("{{ _('Please select photo') }}", "");
+                return;
+            }
+            $("#page").block({ message: $('#deletequestion'), css: { padding: '15px' } });
+        });
+        $('#deleteno').click( function() {$("#page").unblock(); });
+        $('#deleteyes').click(function() {
+            var selected_photos = get_selected_photos();
+            if (selected_photos.length == 0){
+                $("#page").unblock();
+                $.growlUI("{{ _('No Photo Selected') }}", "");
+                return;
+            }
+
+            $("#page").block({message: '<h1>{{ _("Deleting Selected Photos...") }}</h1>',
+                css: { border: '1px solid #60a0c0',width:"400px" }
+            });
+            $.post('/admin/ajax/',
+                {'action': 'delete_photos',
+                'photos': selected_photos.join(','),
+                'album_name': '{{ album.name }}'
+                },
+                function(res){
+                    if (res.status=='ok') {
+                        $.growlUI("{0} {{ _('Photos Deleted') }}".format(res.count), "");
+                        window.location.reload();
+                    } else{
+                        alert('error: '+res.error);
+                    }
+                    $("#page").unblock();
+                }, "json");
+        });
+
         function bind_ajax_actions(){
             $(".description").each(function(){
                 $(this).unbind("click");
@@ -121,19 +190,19 @@
 {% endblock %}
 
 {% block commandbar %}
-        <li>|</li>
-        <li><a href="/slider/{{album.name}}/">{{ _("Slide Show") }}</a></li>
-		{% if users.is_admin %}
-        <li>|</li>
-        <li><a href="javascipt:void();" id="deleteselected">{{ _("Delete Selected") }}</a></li>
-        {% endif %}
+    <li>|</li>
+    <li><a href="/slider/{{album.name}}/"> {{ _('Slide Show') }} </a></li>
+    {% if users.is_admin %}
+    <li>|</li>
+    <li><a id="deleteselected"> {{ _('Delete Selected') }} </a></li>
+    <li>|</li>
+    <li><a id="setcover"> {{ _('Set CoverPhoto') }} </a></li>
+    {% endif %}
 {% endblock %}
    
 {% block page %}
     <!-- start content -->
-    {% if users.is_admin %}
-    <div id="tips">{{ _("Tips: DragAndDrop photos into Album to Upload(Firefox/Chrome)") }}</div>
-    {% endif %}
+    <div style="clear: both;">&nbsp;</div>
     <table id="index"><tr>
         <td id="new_albums">
             <img src="/static/images/left_arrows.jpg" alt="<<"/>
@@ -141,16 +210,21 @@
         <td>
             <div id="content">
                 {% if not photos %}
-                    {{ _("no photo found") }}
+                    {{ _('no photo') }}
                 {% else %}
                     {% for photo in photos %}
-                        <div class="thumb" name="thumb" photo="{{photo.photo_name}}" page="0">
-                            <a href="{{photo.url}}" target="_blank"><img src="{{ photo.thumb_url }}"/></a>
+                        <div class="mythumb" name="thumb" photo="{{photo.photo_name}}" page="0">
+                            <a href="/slider/{{photo.album_name}}/#{{photo.photo_name}}"><img src="{{ photo.thumb_url }}"/></a>
                             {% if users.is_admin %}
+                                <div style="clear: both;"></div>
                                 <input class="selectedphotos" value="{{photo.photo_name}}" type="checkbox"/>
                             {% endif %}
                             <div class="description">
-                                {{photo.description or _('click to edit')}}
+                                {% if users.is_admin %}
+                                    {{photo.description or _('click to edit')}}
+                                {% else %}
+                                    {{photo.description}}
+                                {% endif %}
                             </div>
                             <textarea class="edit_description" rows="2" style="display: none;">{{photo.description}}</textarea>
                         </div>
@@ -166,8 +240,8 @@
     {% if users.is_admin %}
      <div id="deletequestion" style="display:none; cursor: default; color: red;">
        <h1>{{ _('R you seriously delete selected photos?') }}</h1>
-       <input type="button" id="deleteno" value="{{ _('No, I just try the button')}}" />
-       <input type="button" id="deleteyes" value="{{ _('Yes, just delete it')}}" />
+       <input type="button" id="deleteno" value="{{ _('No, I just try the button')}}" />&nbsp;&nbsp;
+       <input type="button" id="deleteyes" value="{{ _('Yes, delete it')}}" />
     </div>
     {% endif %}
 

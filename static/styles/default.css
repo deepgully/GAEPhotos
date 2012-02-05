@@ -13,11 +13,10 @@ body {
     font-size: 12px;
     color: #000000;
     width: 998px;
-
 }
 
 h1, h2, h3 {
-    margin-top: 0;
+
 }
 
 a {
@@ -25,7 +24,7 @@ a {
     text-decoration: none;
 }
 
-a:hover {
+a.hover {
     text-decoration: none;
     color: #ff6600;
 }
@@ -111,6 +110,7 @@ a img {
     text-decoration: none;
     font-weight: bold;
     color: #333333;
+    cursor: pointer;
 }
 
 #menu a:hover {
@@ -241,6 +241,10 @@ a img {
 .edit_description {
     border: 1px solid #ffa500;
 }
+.description2 {
+    font-weight: normal;
+    font-style: italic;
+}
 #desp_admin {
     cursor: hand;
     width: 100%;
@@ -261,7 +265,7 @@ a img {
 }
 
 /* Thumb */
-.thumb {
+.mythumb {
     width: 200px;
     height: 180px;
     padding: 5px;
@@ -269,7 +273,7 @@ a img {
     float: left;
 }
 
-.thumb img {
+.mythumb img {
     max-width: 200px;
     max-height: 160px;
 }
@@ -388,25 +392,7 @@ a img {
 
 /* Pager */
 #pager {
-    float: right;
-    margin: 5px 20px 5px 5px;
-    background: #CDEB8B;
-    padding: 0px 10px 0px 10px;
-}
-
-#pager .alignleft {
-    float: left;
-}
-
-#pager .aligncenter {
-    float: left;
-    margin-left: 10px;
-    margin-right: 10px;
-    color: #ff6600;
-}
-
-#pager .alignright {
-    float: right;
+    width: 32px;
 }
 
 /* Latest */
@@ -417,8 +403,8 @@ a img {
 }
 
 #latest_photo_container {
-    width: 515px;
-    margin-left: 15px;
+    width: 88%;
+    margin-left: 45px;
     float: left;
 }
 
@@ -476,7 +462,6 @@ fieldset {
     border-collapse: collapse;
     background-color: #EAF3FA;
     border: 1px solid #c6d9e9;
-    margin-left: 1px;
     float: left;
 }
 

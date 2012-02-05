@@ -4,7 +4,21 @@
 <script type="text/javascript" src="/static/js/jquery.blockUI.js"></script>
 <script type="text/javascript">
 $(document).ready(function() {
-
+    $("#watermark_enable").change(function(){
+        if($(this).attr('checked')){
+            $("#watermark").show().focus();
+        } else {
+            $("#watermark").hide();
+        }
+    });
+    $("#block_referrers").change(function(){
+        if($(this).attr('checked')){
+            $("#white_list").show();
+            $("#white_list textarea").focus();
+        } else {
+            $("#white_list").hide();
+        }
+    });
 });              
 </script>
 {% endblock %}
@@ -38,20 +52,43 @@ $(document).ready(function() {
             <td><input id="latest_photos_count" name="latest_photos_count" type="text" size="20" value="{{settings.latest_photos_count}}"/>
             </td>
        </tr>
-       <tr>
+       <!--tr>
             <th scope="row">{{ _("Latest Comments Count") }}:</th>
             <td><input id="latest_comments_count" name="latest_comments_count" type="text" size="20" value="{{settings.latest_comments_count}}"/>
             </td>
-       </tr>
+       </tr-->
        <tr>
             <th scope="row">{{ _("Max Upload Size") }}(M):</th>
             <td><input id="max_upload_size" name="max_upload_size" type="text" size="20" value="{{settings.max_upload_size}}"/>
             </td>
        </tr>
        <tr>
+            <th scope="row">{{ _("Watermark") }}:</th>
+            <td>
+                <input type="checkbox" id="watermark_enable" name="enable_watermark"
+                       {% if settings.enable_watermark %}checked{% endif %} />{{ _("Enable Watermark") }}
+                <br/><input id="watermark" name="watermark" type="text" size="18" value="{{ settings.watermark }}"
+                    {% if not settings.enable_watermark %}style="display: none;"{% endif %}/>
+            </td>
+       </tr>
+        <tr>
+            <th scope="row">{{ _("Block Hotlinking") }}:</th>
+            <td>
+                <input type="checkbox" id="block_referrers" name="block_referrers"
+                       {% if settings.block_referrers %}checked{% endif %} />{{ _("Enable Block Hotlinking") }}
+                <br/>
+                <div id="white_list" {% if not settings.block_referrers %}style="display: none;"{% endif %}>
+                    {{ _("White List") }}: ({{ _("support Unix style Wildcard") }} ?, *, [abc] or [!abc])<br/>
+                    <textarea id="unblock_sites_list" name="unblock_sites_list" wrap="soft"
+                              rows="3" cols="25">{{settings.unblock_sites_list|join('\n')}}</textarea>
+                    {{ _('one pattern per line') }}
+                </div>
+            </td>
+        </tr>
+       <tr>
             <th scope="row">{{ _("Admins") }}:</th>
-            <td><textarea id="adminlist" name="adminlist" wrap="soft" rows="3" cols="25">{{settings.adminlist|join(',')}}</textarea>
-                ({{ _('split by ,') }})</td>
+            <td><textarea id="adminlist" name="adminlist" wrap="soft" rows="3" cols="25">{{settings.adminlist|join('\n')}}</textarea>
+                {{ _('one email per line') }}</td>
        </tr>
        <tr>
             <th scope="row"></th>

@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block head_ex %}
+    <style type="text/css">
+        #copylink.active { background-color:#aaa; }
+        #copylink.hover { color:#ff6600; text-decoration: underline;}
+    </style>
+    <link rel="stylesheet" href="/static/galleriffic/css/galleriffic-5.css" type="text/css" />
+    <link rel="stylesheet" href="/static/galleriffic/css/black.css" type="text/css" />
+    <script type="text/javascript" src="/static/zeroclipboard/ZeroClipboard.js"></script>
+    <script type="text/javascript" src="/static/galleriffic/js/jquery.history.js"></script>
+    <script type="text/javascript" src="/static/galleriffic/js/jquery.galleriffic.js"></script>
+    <script type="text/javascript" src="/static/galleriffic/js/jquery.opacityrollover.js"></script>
+    <script type="text/javascript">
+        document.write('<style>.noscript { display: none; }</style>');
+    </script>
+    <script type="text/javascript">
+        $(document).ready(function() {
+// We only want these styles applied when javascript is enabled
+            $('div.content').css('display', 'block');
+
+            // Initially set opacity on thumbs and add
+            // additional styling for hover effect on thumbs
+            var onMouseOutOpacity = 0.5;
+            $('#thumbs ul.thumbs li, div.navigation a.pageLink').opacityrollover({
+                mouseOutOpacity:   onMouseOutOpacity,
+                mouseOverOpacity:  1.0,
+                fadeSpeed:         'fast',
+                exemptionSelector: '.selected'
+            });
+
+            // Initialize Advanced Galleriffic Gallery
+            var gallery = $('#thumbs').galleriffic({
+                delay:                     3000,
+                numThumbs:                 10,
+                preloadAhead:              12,
+                enableTopPager:            true,
+                enableBottomPager:         true,
+                imageContainerSel:         '#slideshow',
+                controlsContainerSel:      '#controls',
+                captionContainerSel:       '#caption',
+                loadingContainerSel:       '#loading',
+                renderSSControls:          true,
+                renderNavControls:         true,
+                playLinkText:              '{{ _("Play SlideShow") }}',
+                pauseLinkText:             '{{ _("Pause SlideShow") }}',
+                prevLinkText:              '&lsaquo; {{ _("Prev Photo") }}',
+                nextLinkText:              '{{ _("Next Photo") }} &rsaquo;',
+                nextPageLinkText:          '{{ _("Next Page") }} &rsaquo;',
+                prevPageLinkText:          '&lsaquo; {{ _("Prev Page") }}',
+                enableHistory:             true,
+                autoStart:                 false,
+                syncTransitions:           true,
+                defaultTransitionDuration: 900,
+                onSlideChange:             function(prevIndex, nextIndex) {
+                    $('#thumbs ul.thumbs').children()
+                            .eq(prevIndex).fadeTo('fast', onMouseOutOpacity).end()
+                            .eq(nextIndex).fadeTo('fast', 1.0);
+
+                    $('#page').find('div.photo-index').html('{{ _("Photo") }} '+ (nextIndex+1) +'/'+ this.data.length);
+                },onPageTransitionOut:       function(callback) {
+                    $('#thumbs ul.thumbs').fadeTo('fast', 0.0, callback);
+                },
+                onPageTransitionIn:        function() {
+                    var prevPageLink = $('div.navigation a.prev').css('visibility', 'hidden');
+                    var nextPageLink = $('div.navigation a.next').css('visibility', 'hidden');
+
+                    // Show appropriate next / prev page links
+                    if (this.displayedPage > 0)
+                        prevPageLink.css('visibility', 'visible');
+
+                    var lastPage = this.getNumPages() - 1;
+                    if (this.displayedPage < lastPage)
+                        nextPageLink.css('visibility', 'visible');
+
+                    $('#thumbs ul.thumbs').fadeTo('fast', 1.0);
+                }
+            });
+
+            /**************** Event handlers for custom next / prev page links **********************/
+
+            $('div.navigation a.prev').click(function(e) {
+                gallery.previousPage();
+                e.preventDefault();
+            });
+
+            $('div.navigation a.next').click(function(e) {
+                gallery.nextPage();
+                e.preventDefault();
+            });
+            /****************************************************************************************/
+
+            /**** Functions to support integration of galleriffic with the jquery.history plugin ****/
+
+                // PageLoad function
+                // This function is called when:
+                // 1. after calling $.historyInit();
+                // 2. after calling $.historyLoad();
+                // 3. after pushing "Go Back" button of a browser
+            function pageload(hash) {
+                // alert("pageload: " + hash);
+                // hash doesn't contain the first # character.
+                if(hash) {
+                    $.galleriffic.gotoImage(hash);
+                } else {
+                    gallery.gotoIndex(0);
+                }
+            }
+
+            // Initialize history plugin.
+            // The callback is called at once by present location.hash.
+            $.historyInit(pageload, "");
+
+            // set onlick event for buttons using the jQuery 1.3 live method
+            $("a[rel='history']").live('click', function() {
+                var hash = this.href;
+                hash = hash.replace(/^.*#/, '');
+
+                // moves to a new page.
+                // pageload is called at once.
+                // hash don't contain "#", "?"
+                $.historyLoad(hash);
+
+                return false;
+            });
+            ZeroClipboard.setMoviePath( '/static/zeroclipboard/ZeroClipboard.swf' );
+            var clip = new ZeroClipboard.Client();
+            clip.addEventListener( 'mouseDown', function(client) {
+                clip.setText( "{0}{1}".format('{{ host_url }}', gallery.currentImage.slideUrl) );
+                $.growlUI("{{ _('Photo link copied to Clipboard') }}", "");
+            } );
+            clip.glue("copylink");
+        });
+    </script>
+{% endblock %}
+
+{% block ex_navigation %}
+    <li>&gt;&gt;</li>
+    <li><a href="">{{ _("Slide Show") }}</a></li>
+{% endblock %}
+
+{% block commandbar %}
+    <li>|</li>
+    <li><a id="copylink" href="javascript:void();">{{ _('Copy Photo Link') }}</a></li>
+{% endblock %}
+
+{% block page %}
+<!-- start content -->
+<div>
+    <div class="navigation-container">
+        <div id="thumbs" class="navigation">
+            <div style="clear: both;"></div>
+            <a class="pageLink prev" style="visibility: hidden;" href="#" title="{{ _('Prev Page') }}"></a>
+            <ul class="thumbs noscript">
+                {% for photo in photos %}
+                    <li>
+                        <a class="thumb" name="{{photo.photo_name}}"
+                           href="/{{ photo.album_name }}/{{photo.photo_name}}" title="{{photo.photo_name}}">
+                            <img src="/{{ photo.album_name }}/{{photo.photo_name}}/thumb/" alt="{{photo.description}}" />
+                        </a>
+                        <div class="caption">
+                            <div class="image-desc">{{photo.description}}</div>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+            <a class="pageLink next" style="visibility: hidden;" href="#" title="{{ _('Next Page') }}"></a>
+        </div>
+
+    </div>
+    <div class="content">
+        <div class="photo-index"></div>
+        <div id="caption" class="caption-container">
+        </div>
+        <div class="slideshow-container">
+            <div id="controls" class="controls"></div>
+            <div id="loading" class="loader"></div>
+            <div id="slideshow" class="slideshow"></div>
+        </div>
+    </div>
+</div>
+<!-- end content -->
+<div style="clear: both;">&nbsp;</div>
+<script type="text/javascript">
+    var $body = (window.opera) ? (document.compatMode == "CSS1Compat" ? $('html') : $('body')) : $('html,body');
+    $body.animate({scrollTop:75}, 1000);
+</script>
+{% endblock %}

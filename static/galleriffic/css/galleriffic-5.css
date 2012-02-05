@@ -1,0 +1,199 @@
+div#container {
+	overflow: hidden;
+}
+div.content {
+	display: none;
+	clear: both;
+	text-align: center;
+	position: relative;
+}
+
+div.content a, div.navigation a {
+	text-decoration: none;
+}
+div.content a:hover, div.content a:active {
+	text-decoration: underline;
+}
+
+div.navigation a.pageLink {
+	height: 60px;
+	line-height: 60px;
+}
+
+div.controls {
+	height: 18px;
+}
+div.controls a {
+	padding: 5px;
+}
+div.ss-controls {
+	float: left;
+}
+div.nav-controls {
+	float: right;
+}
+
+div.slideshow-container,
+div.loader,
+div.slideshow a.advance-link {
+	width: 100%; /* This should be set to be at least the width of the largest image in the slideshow with padding */
+}
+
+div.loader,
+div.slideshow a.advance-link,
+{
+	height: 640px; /* This should be set to be at least the height of the largest image in the slideshow with padding */	
+}
+
+div.slideshow-container {
+	position: relative;
+	clear: both;
+	float: top;
+	height: 640px;
+}
+
+div.loader {
+	position: absolute;
+	top: 0;
+	left: 0;
+	background-image: url('images/loader.gif');
+	background-repeat: no-repeat;
+	background-position: center;
+	height: 640px;
+}
+div.slideshow span.image-wrapper {
+	display: block;
+	position: absolute;
+	top: 30px;
+	left: 50px;
+	text-align: left;
+}
+div.slideshow a.advance-link {
+	display: block;
+	text-align: center;
+}
+
+div.slideshow a.advance-link:hover,
+div.slideshow a.advance-link:active,
+div.slideshow a.advance-link:visited {
+	text-decoration: none;
+}
+div.slideshow a.advance-link:focus {
+	outline: none;
+}
+
+div.slideshow img {
+
+	border-style: solid;
+	border-width: 1px;
+	max-width: 800px;
+	max-height: 600px;
+    width:auto;
+    height:auto;
+}
+div.caption-container {
+	display: block;
+	float: top;
+	position: relative;
+	height: 16px;
+}
+span.image-caption {
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+div.caption-container, span.image-caption {
+	width: 100%;
+}
+
+div.caption {
+	padding: 0 12px;
+}
+
+div.image-title {
+	font-weight: bold;
+	font-size: 1.4em;
+}
+div.image-desc {
+	line-height: 1.3em;
+}
+div.download {
+	margin-top: 8px;
+}
+div.photo-index {
+	float: top;
+	text-align: center;
+}
+div.navigation-container {
+	float: left;
+}
+div.navigation {
+	float: left;
+}
+div.navigation a.pageLink {
+	display: block;
+	float: left;
+	margin: 2px;
+	width: 16px;
+	background-position:center center;
+	background-repeat:no-repeat;
+}
+div.navigation a.pageLink:focus {
+	outline: none;
+}
+
+ul.thumbs {
+	position: relative;
+	float: left;
+	margin: 0;
+	padding: 0;
+}
+ul.thumbs li {
+	float: left;
+	padding: 0;
+	margin: 2px;
+	list-style: none;
+}
+a.thumb {
+	padding: 1px;
+	display: block;
+}
+a.thumb:focus {
+	outline: none;
+}
+ul.thumbs img {
+	border: none;
+	display: block;
+	max-width: 80px;
+	max-height: 60px;
+}
+div.pagination {
+	clear: both;
+	float: top;
+	width:100%;
+}
+div.pagination a, div.pagination span.current, div.pagination span.ellipsis {
+	position: relative;
+	display: block;
+	float: left;
+	margin-right: 2px;
+	padding: 4px 7px 2px 7px;
+	border: 1px solid #ccc;
+}
+div.pagination a:hover {
+	text-decoration: none;
+}
+div.pagination span.current {
+	font-weight: bold;
+}
+div.pagination span.ellipsis {
+	border: none;
+	padding: 5px 0 3px 2px;
+}
+
+div.gallery-gutter {
+	clear: both;
+	padding-bottom: 20px;
+}

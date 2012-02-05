@@ -9,7 +9,7 @@
         function refresh_pager() {
             cur_page < last_page ? $("#old_albums").show() : $("#old_albums").hide();
             cur_page > 0 ? $("#new_albums").show() : $("#new_albums").hide();
-            $.growlUI("Page "+(cur_page+1), "");
+            $.growlUI("{{ _('Page {0}') }}".format(cur_page+1), "");
         }
         refresh_pager();
 
@@ -33,14 +33,14 @@
                 $("#content li[name='album'][page='"+cur_page+"']").fadeIn(1000);
                 refresh_pager();
             } else {
-                $("#page").block({ message: $('#loading')});
+                $("#index").block({ message: $('#loading')});
                 $.post('/admin/ajax/',
                         {'action': 'get_all_albums',
                          'albums_cursor': albums_cursor,
                          'pagesize': {{ settings.albums_per_page }}
                         },
                         function(res){
-                            $("#page").unblock();
+                            $("#index").unblock();
                             if (res.status=='ok') {
                                 albums_cursor = res.cursor;
 
@@ -127,23 +127,23 @@
                 $(this).unbind("click");
                 $(this).click(function(){
                     var close = $(this);
-                    if(! confirm('{{ _("Are you seriously delete this album?")}}'))
+                    if(! confirm("{{ _('Are you sure delete this album?')}}"))
                     {
                         return false;
                     }
-                    $("#page").block({message: '<h1>{{ _("Delete album...") }}</h1>' });
+                    $("#index").block({message: "<h1>{{ _('Delete album......') }}</h1>" });
                     $.post('/admin/ajax/',
                             {'action': 'delete_album',
                              'album_name': close.parent().attr("album")
                             },
                             function(res){
                                 if (res.status=='ok') {
-                                    $.growlUI('{{ _("Album Deleted") }}', "");
+                                    $.growlUI("{{ _('Album Deleted') }}", "");
                                     close.parent().remove();
                                 } else{
                                     alert('error: '+res.error);
                                 }
-                                $("#page").unblock();
+                                $("#index").unblock();
                             }, "json");
                 });
             });
@@ -155,10 +155,6 @@
 </script>
 {% endblock %}
 {% block page %}
-    {% if users.is_admin %}
-        <div id="tips">{{ _("Tips: DragAndDrop photos into Album to Upload(Firefox/Chrome)") }}</div>
-        <div style="clear: both;"></div>
-    {% endif %}
     <table id="index">
     <tr>
         <td id="new_albums">
@@ -190,6 +186,7 @@
         </td>
         {% endif %}
     </tr></table>
-    <div style="clear: both;"></div>
+    {% include "latest.html" %}
+    <div style="clear: both;">&nbsp;</div>
     <div id="loading" style="display:none"><img src="/static/images/loading.gif" alt="loading..."/></div>
 {% endblock %}

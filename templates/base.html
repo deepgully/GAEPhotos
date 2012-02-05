@@ -64,6 +64,11 @@ $(document).ready(function() {
         $.unblockUI();
     });
     $('#create').click(function() {
+        var new_name = $('#new_name').val();
+        if (/[#?\$%\^&\*\/\\<>]+/g.test(new_name)){
+            alert('{{ _("invalid character in album name") }}');
+            return;
+        }
         $.post('/admin/ajax/',
                 {'action': 'create_album',
                  'name': $('#new_name').val(),
@@ -98,7 +103,7 @@ $(document).ready(function() {
         {% if users.cur_user %}
             <a href="/logout/">{{ _('Logout')}}</a>
         {% else %}
-            <a href="/login/">{{ _("Login") }}</a>
+            <a href="/login/">{{ _('Login') }}</a>
         {% endif %}
     </div>
     </div>
@@ -124,11 +129,11 @@ $(document).ready(function() {
    <div id="commandbar">
        <ul>
        {% if users.is_admin %}
-        <li><a href="/admin/upload/">Add Photos</a></li>
+        <li><a href="/admin/upload/"> {{ _('Add Photos') }} </a></li>
        {% endif %}
        {% if users.is_admin %}
            <li>|</li>
-           <li><a id="btncreate" href="javascript:void(0);">Create Album</a></li>
+           <li><a id="btncreate"> {{ _('Create Album') }} </a></li>
        {% endif %}
        {% block commandbar %}
        {% endblock %}
@@ -144,19 +149,30 @@ $(document).ready(function() {
 <!-- end page -->
 <div style="clear: both;"></div>
 <div id="footer">
-    <p>Powered by  <a href="http://code.google.com/p/gaephotos/">GAEPhotos</a>. Theme by <a href="http://www.freecsstemplates.org/">Free CSS Templates</a>.</p>
+    <p>Powered by  <a href="http://code.google.com/p/gaephotos/">GAEPhotos V{{ version }}</a>. Theme by <a href="http://www.freecsstemplates.org/">Free CSS Templates</a>.</p>
 </div>
 {% if users.is_admin %}
 <div id="create_album" style="display:none; cursor: default;">
-    <h1>{{ _("Create Album") }}</h1>
-    <p>{{ _("album name") }}:
-        <input id="new_name" name="new_name" type="text" size="18" value=""/>
-        <input id="new_public" type="radio" name="new_public" value="true" checked>{{ _("public") }}</input>
-        <input type="radio" name="new_public" value="false">{{ _("private") }}</input></p>
-    <p>{{ _("description") }}:
-        <input id="new_description" name="new_description" type="text" size="30" value=""/></p>
-    <p><input id="create" type="submit" value="{{ _('Create Album') }}" name="createalbum">
-        <input id="cancel" type="submit" value="{{ _('Cancel') }}" name="createalbum"></p>
+    <h2>{{ _('Create Album') }}</h2>
+    <table id="admin_table" style="width: 100%;">
+        <tr>
+            <th scope="row" style="width: 100px;">{{ _('Album Name') }}:</th>
+            <td style="text-align: left;">
+                <input id="new_name" name="new_name" type="text" size="18" value=""/>
+                <input id="new_public" type="radio" name="new_public" value="true" checked>{{ _("public") }}</input>
+                <input type="radio" name="new_public" value="false">{{ _("private") }}</input>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row" style="width: 100px;">{{ _('Description') }}:</th>
+            <td style="text-align: left;"> <input id="new_description" name="new_description" type="text" size="30" value=""/> </td>
+        </tr>
+    </table>
+    <div style="clear: both;"></div>
+    <div style="padding: 5px;">
+        <input id="create" type="submit" value="{{ _('Create Album') }}" name="createalbum">
+        <input id="cancel" type="submit" value="{{ _('Cancel') }}" name="createalbum">
+    </div>
 </div>
 {% endif %}
 </body>

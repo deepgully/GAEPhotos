@@ -50,19 +50,19 @@ class BaseModel(db.Model):
             if unicode(p) in kwds:
                 val = kwds.get(p)
                 t = props[p].data_type
-                if t == list:
-                    val = val.split(",")
-                elif t == bool:
+                if t == list and not isinstance(val, list):
+                    val = [line.strip() for line in val.strip().split("\n") if (line and line.strip())]
+                elif t == bool and not isinstance(val, bool):
                     val = val.strip().capitalize()
-                    if val == "True" or val == u"True":
-                        val = True
-                    else:
+                    if val == "False" or val == u"False":
                         val = False
+                    else:
+                        val = True
                 elif t == basestring:
                     try:
-                        val = str(val)
+                        val = str(val).strip()
                     except:
-                        val = unicode(val)
+                        val = unicode(val).strip()
                 else:
                     val = t(val)
                 setattr(self,p,val)
@@ -139,9 +139,14 @@ class DBSiteSettings(BaseModel):
     description = db.StringProperty(multiline=True, default="Photo gallery based on GAEPhotos")
     albums_per_page = db.IntegerProperty(default=8)
     thumbs_per_page = db.IntegerProperty(default=12)
-    latest_photos_count = db.IntegerProperty(default=9)
+    latest_photos_count = db.IntegerProperty(default=10)
     latest_comments_count = db.IntegerProperty(default=5)
     max_upload_size = db.FloatProperty(default=2.0)  #max size(M)
+    enable_watermark = db.BooleanProperty(default=False)
+    watermark = db.StringProperty(default="@GAEPhotos")
+    watermark_img = db.BlobProperty()
+    block_referrers = db.BooleanProperty(default=False)
+    unblock_sites_list = db.ListProperty(str, default=[])
     adminlist = db.ListProperty(str, default=[])
 
     @classmethod
@@ -228,6 +233,42 @@ class DBAlbum(BaseModel):
         blobstore.delete(blob_keys)
         blobstore.delete(thumb_blob_keys)
 
+    def delete_photos_by_name(self, photo_names):
+        photo_key_name_list = []
+        for photo_name in photo_names:
+            photo_key_name_list.append(DBPhoto.gen_key_name(album_name=self.name, photo_name=photo_name))
+        photos = DBPhoto.get_by_key_name(photo_key_name_list)
+        photo_keys = []
+        blob_keys = []
+        thumb_blob_keys = []
+        for photo in photos:
+            photo_keys.append(photo.key())
+            blob_keys.append(photo.blob_key)
+            thumb_blob_keys.append(photo.thumb_blob_key)
+
+        def txn():
+            remove(photo_keys)
+            db.delete(photo_keys)
+            for photo_key_name in photo_key_name_list:
+                self.photoslist.remove(photo_key_name)
+                if photo_key_name == self.coverphoto:
+                    self.coverphoto = ""
+            self.save()
+            return len(photo_keys)
+        count = db.run_in_transaction(txn)
+        blobstore.delete(blob_keys)
+        blobstore.delete(thumb_blob_keys)
+        return count
+
+    def set_cover_photo(self, photo_name):
+        photo_key_name = DBPhoto.gen_key_name(album_name=self.name, photo_name=photo_name)
+        photo = DBPhoto.get_by_key_name(photo_key_name)
+        if not photo:
+            return False
+        self.coverphoto = photo_key_name
+        self.save()
+        return True
+
     def to_dict(self):
 
         return {
@@ -272,6 +313,10 @@ class DBPhoto(BaseModel):
     def get_photo_by_name(cls, album_name, photo_name):
         key_name = cls.gen_key_name(album_name=album_name, photo_name=photo_name)
         return cls.get_by_key_name(key_name, parent=cls.db_parent)
+
+    @classmethod
+    def get_latest_photos(cls, count):
+        return cls.all().order("-createdate").fetch(count)
 
     @classmethod
     def get_url_from_keyname(cls, key_name):
@@ -319,5 +364,7 @@ class DBComment(BaseModel):
     date = db.DateTimeProperty(auto_now_add=True)
     content = db.StringProperty(required=True, multiline=True)
 
-if __name__ == '__main__':
+def main():
     pass
+if __name__ == '__main__':
+    main()

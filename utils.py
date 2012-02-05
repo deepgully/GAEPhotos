@@ -4,7 +4,7 @@ import logging
 from time import gmtime
 from datetime import datetime
 
-from google.appengine.api import files
+VERSION = "1.01"
 
 def _dump_date(d, delim):
     """Used for `http_date` and `cookie_date`."""
@@ -63,12 +63,22 @@ def get_img_type(binary):
         return ImageMime.UNKNOWN
 
 def create_blob_file(mime_type, binary):
+    from google.appengine.api import files
     blob_file_name = files.blobstore.create(mime_type=mime_type)
     with files.open(blob_file_name, 'a') as f:
         f.write(binary)
     files.finalize(blob_file_name)
     blob_key = files.blobstore.get_blob_key(blob_file_name)
     return blob_key
+
+def get_watermark_img_from_google_chart(str_watermark, font_size=20, color="cccccc", out_color="000000"):
+    from google.appengine.api import urlfetch
+    result = urlfetch.fetch(r'http://chart.googleapis.com/chart'\
+          r'?chst=d_text_outline&chld=%s|%s|l|%s|_|%s'%(color,font_size,out_color,str_watermark))
+    if result.status_code == 200:
+        if get_img_type(result.content) != ImageMime.UNKNOWN:
+            return result.content
+    return None
 
 if __name__ == '__main__':
     pass

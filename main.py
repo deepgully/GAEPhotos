@@ -7,13 +7,19 @@ import jinja2
 import webapp2
 from webapp2_extras import json
 from functools import wraps
+from django.utils.encoding import force_unicode
 from google.appengine.api import users
 from google.appengine.ext import blobstore
 from google.appengine.api import memcache
 from google.appengine.ext.webapp import blobstore_handlers
 
+
 import utils
 import model
+from lang import save_current_lang
+from lang import ugettext, ungettext, ccTranslations
+_ = ugettext
+__ = ungettext
 
 def dateformat(value, format='%Y-%m-%d'):
     return value.strftime(format)
@@ -22,10 +28,10 @@ jinja_env = jinja2.Environment(autoescape=True,
     loader=jinja2.FileSystemLoader(os.path.join(os.path.dirname(__file__), "templates")),
     extensions=['jinja2.ext.i18n'])
 
-jinja_env.install_null_translations(True)
+jinja_env.install_gettext_translations(ccTranslations())
 jinja_env.filters['date'] = dateformat
 
-logging.info("init jinga")
+logging.info("init jinja2")
 
 # public classes and functions
 
@@ -45,7 +51,7 @@ def requires_site_owner(method):
     @wraps(method)
     def wrapper(*args, **kwargs):
         if not check_owner_auth():
-            raise Exception("You are not authorized")
+            raise Exception(_("You are not authorized"))
         else:
             return method(*args, **kwargs)
     return wrapper
@@ -54,7 +60,7 @@ def requires_site_admin(method):
     @wraps(method)
     def wrapper(*args, **kwargs):
         if not check_admin_auth():
-            raise Exception("You are not authorized")
+            raise Exception(_("You are not authorized"))
         else:
             return method(*args, **kwargs)
     return wrapper
@@ -62,6 +68,7 @@ def requires_site_admin(method):
 def render_with_user_and_settings(templatename, context={}):
     template = jinja_env.get_template(templatename)
     context.update({"settings": model.SITE_SETTINGS,
+                    "version": utils.VERSION,
                     "users": {"is_admin": check_admin_auth(),
                               "is_owner": check_owner_auth(),
                               "cur_user": users.get_current_user()}})
@@ -72,10 +79,115 @@ def get_all_albums(pagesize=20, start_cursor=None, order="-createdate"):
     albums, cursor = model.DBAlbum.get_all_albums(is_admin, pagesize, start_cursor, order)
     return albums, cursor
 
-class myRequestHandler(webapp2.RequestHandler):
+class ccRequestHandler(webapp2.RequestHandler):
     def handle_exception(self, exception, debug):
         logging.exception("exception in handler")
-        self.response.out.write(render_with_user_and_settings("error.html",{"error_msg":str(exception)}))
+        self.response.out.write(render_with_user_and_settings("error.html",{"error_msg":force_unicode(exception)}))
+
+class ccPhotoRequestHandler(blobstore_handlers.BlobstoreDownloadHandler):
+    CACHE_TIME = 3600*24*30
+    URL_PHOTO_NOT_FOUND = "/static/images/image_not_found.jpg"
+    URL_BLOCKED_REFERRER = "/static/images/no_hotlinking.gif"
+    @staticmethod
+    def get_blob_info_from_cache_or_db(albumname, photoname, type="photo"):
+        key = "photo_cache_%s_%s_%s"%(type, albumname, photoname)
+        blob_info = memcache.get(key)
+        if not blob_info:
+            photo = model.DBPhoto.get_photo_by_name(albumname, photoname)
+            if photo:
+                if type == "photo":
+                    blob_key = photo.blob_key
+                else:
+                    blob_key = photo.thumb_blob_key
+                blob_info = blobstore.get(blob_key)
+                if blob_info:
+                    try:
+                        memcache.set(key, blob_info)
+                    except:
+                        pass
+        return blob_info
+
+    @staticmethod
+    def create_watermark(binary, watermark, opacity=0.4):
+        from google.appengine.api import images
+        img = images.Image(binary)
+        width = img.width
+        height = img.height
+        img = images.composite([(img._image_data, 0, 0, 1.0, images.TOP_LEFT),
+            (watermark, -2, -2, opacity, images.BOTTOM_RIGHT),
+        ], width, height, 0, images.PNG)
+        return img
+
+
+    def send_blob_with_watermark(self, blob_key_or_info, watermark=""):
+        if isinstance(blob_key_or_info, blobstore.BlobInfo):
+            blob_key = blob_key_or_info.key()
+            blob_info = blob_key_or_info
+        else:
+            blob_key = blob_key_or_info
+            blob_info = blobstore.get(blob_key)
+
+        if not blob_info:
+            self.redirect(self.URL_PHOTO_NOT_FOUND)
+
+        key = "blob_cache_%s_%s"%(blob_key, watermark)
+        image_data = memcache.get(key)
+        if not image_data:
+            blob_reader = blobstore.BlobReader(blob_key)
+            image_data = ccPhotoRequestHandler.create_watermark(blob_reader.read(),
+                                watermark = model.SITE_SETTINGS.watermark_img)
+            blob_reader.close()
+            if image_data:
+                try:
+                    memcache.set(key, image_data)
+                except:
+                    pass
+            else:
+                self.redirect(self.URL_PHOTO_NOT_FOUND)
+
+        self.response.headers['Content-Type'] = utils.ImageMime.PNG
+        self.response.out.write(image_data)
+
+
+    def send_photo(self, album_name, photo_name, photo_type):
+        if self.check_referrer() == False:
+            self.redirect(self.URL_BLOCKED_REFERRER)
+
+        album = model.DBAlbum.get_album_by_name(album_name)
+        if not album or (not album.public and not check_admin_auth()):
+            self.redirect(self.URL_PHOTO_NOT_FOUND)
+
+        blob_info = ccPhotoRequestHandler.get_blob_info_from_cache_or_db(album_name, photo_name, photo_type)
+        if blob_info:
+            self.response.headers['Date'] = utils.http_date()
+            self.response.headers['Cache-Control'] = 'max-age=%d, public' % self.CACHE_TIME
+            self.response.headers['Expires'] = utils.http_date(time.time() + self.CACHE_TIME)
+            if photo_type=="photo" and model.SITE_SETTINGS.enable_watermark:
+                self.send_blob_with_watermark(blob_info, model.SITE_SETTINGS.watermark)
+            else:
+                self.send_blob(blob_info)
+        else:
+            self.redirect(self.URL_PHOTO_NOT_FOUND)
+            #self.error(404)
+            #self.response.out.write('File Not Found')
+
+    def check_referrer(self):
+        if model.SITE_SETTINGS.block_referrers == False:
+            return True
+        referer = self.request.environ.get("HTTP_REFERER")
+        if not referer:
+            return True
+        from urlparse import urlparse
+        from urllib import splitport
+        from fnmatch import fnmatch
+        host = splitport(self.request.environ.get("HTTP_HOST",''))[0]
+        refer_host = urlparse(referer).hostname
+        if host.lower() == refer_host.lower():
+            return True
+        for site_pattern in model.SITE_SETTINGS.unblock_sites_list:
+            if fnmatch(referer, site_pattern):
+                return True
+        return False
 
 #ajax methods
 ERROR_RES = {"status": "error",
@@ -89,18 +201,25 @@ def ajax_delete_album(album_name):
         album.remove()
         res["status"] = "ok"
     else:
-        res["error"] = "album not exist"
+        res["error"] = _("album not exist")
     return res
 
+MAX_ALBUM_NAME = 30
+MAX_DESCRIPTION = 50
 @requires_site_admin
 def ajax_create_album(name, description="description", public=True):
     res = ERROR_RES.copy()
-    name = cgi.escape(name.strip())
-    if len(name) > 30:
-        raise Exception("album name too long(max 30 chars)")
+    name = name.strip().replace("&","").replace("#","").replace("?","").replace("$","").replace("^","")
+    name = name.replace("*","").replace("/","").replace("\\","").replace("<","").replace(">","")
+    if not name:
+        raise Exception(_("album name is blank"))
+    if len(name) > MAX_ALBUM_NAME:
+        raise Exception(__("album name too long[max %0 chars]", MAX_ALBUM_NAME))
     description = cgi.escape(description.strip()) or "description"
-    if len(description) > 50:
-        raise Exception("album description too long(max 50 chars)")
+    if len(description) > MAX_DESCRIPTION:
+        raise Exception(__("album description too long[max %0 chars]", MAX_DESCRIPTION))
+    if name.lower() in RESERVED_ALBUM_NAME:
+        raise Exception(_("unusable album name"))
     if not isinstance(public, bool):
         public = public.strip().capitalize()
         if public == "True":
@@ -109,7 +228,7 @@ def ajax_create_album(name, description="description", public=True):
             public = False
     album = model.DBAlbum.check_exist(name)
     if album:
-        res["error"] = "name existed"
+        res["error"] = _("album name already exists")
     else:
         album = model.DBAlbum.create(name, description, bool(public), owner=users.get_current_user())
         res.update(album.to_dict())
@@ -133,7 +252,7 @@ def ajax_get_album(album_name):
         res["album"] = album.to_dict()
         res["status"] = "ok"
     else:
-        res["error"] = "album not exist"
+        res["error"] = _("album not exist")
     return res
 
 def ajax_get_album_photos(album_name, start_index=0, pagesize=20):
@@ -143,7 +262,7 @@ def ajax_get_album_photos(album_name, start_index=0, pagesize=20):
 
     album = model.DBAlbum.get_album_by_name(album_name)
     if not album:
-        raise Exception("album not exist")
+        raise Exception(_("album not exist"))
 
     photos = model.DBPhoto.get_by_key_name(album.photoslist[start_index:start_index+pagesize])
 
@@ -162,7 +281,7 @@ def ajax_save_album(name, description, **kwds):
         res["album"] = album.to_dict()
         res["status"] = "ok"
     else:
-        res["error"] = "album not exist"
+        res["error"] = _("album not exist")
     return res
 
 @requires_site_admin
@@ -175,7 +294,33 @@ def ajax_save_photo(album_name, photo_name, description, **kwds):
         res["photo"] = photo.to_dict()
         res["status"] = "ok"
     else:
-        res["error"] = "photo not exist"
+        res["error"] = _("photo not exist")
+    return res
+
+@requires_site_admin
+def ajax_delete_photos(album_name, photos):
+    res = ERROR_RES.copy()
+    photo_names = photos.split(",")
+    album = model.DBAlbum.get_album_by_name(album_name)
+    if album:
+        count = album.delete_photos_by_name(photo_names)
+        res["status"] = "ok"
+        res["count"] = count
+    else:
+        res["error"] = _("album not exist")
+    return res
+
+@requires_site_admin
+def ajax_set_cover_photo(album_name, photo_name):
+    res = ERROR_RES.copy()
+    album = model.DBAlbum.get_album_by_name(album_name)
+    if album:
+        if album.set_cover_photo(photo_name):
+            res["status"] = "ok"
+        else:
+            res["error"] = _("photo not exist")
+    else:
+        res["error"] = _("album not exist")
     return res
 
 @requires_site_admin
@@ -194,6 +339,8 @@ AJAX_METHODS = {
     "get_upload_url": ajax_get_upload_url,
     "get_album_photos": ajax_get_album_photos,
     "save_photo": ajax_save_photo,
+    "delete_photos": ajax_delete_photos,
+    "set_cover_photo": ajax_set_cover_photo,
 }
 def dispatch(parameters):
     result = ERROR_RES.copy()
@@ -201,24 +348,24 @@ def dispatch(parameters):
     logging.info("ajax action: %s"%(action))
     if action not in AJAX_METHODS:
         result["status"] = "error"
-        result["error"] = "unsupported method"
+        result["error"] = _("unsupported method")
     else:
         try:
             result = AJAX_METHODS[action](**parameters)
         except Exception,e:
             logging.exception("error in dispatch")
-            result["error"] = str(e)
+            result["error"] = force_unicode(e)
             result["status"] = "error"
     return json.encode(result)
 
 #admin pages
-class AdminAjaxPage(myRequestHandler):
+class AdminAjaxPage(ccRequestHandler):
     def post(self):
         self.response.out.write(dispatch(self.request.POST))
     def get(self):
         self.response.out.write(dispatch(self.request.GET))
 
-class AdminUploadPage(myRequestHandler):
+class AdminUploadPage(ccRequestHandler):
     @requires_site_admin
     def get(self):
         albums,albums_cursor = get_all_albums(pagesize=1000)
@@ -229,24 +376,29 @@ class AdminUploadPage(myRequestHandler):
         try:
             binary = self.request.body
             if not binary:
-                raise Exception("no file upload")
+                raise Exception(_("no upload file"))
             if len(binary) > model.SITE_SETTINGS.max_upload_size*1024*1024:
-                raise Exception("file size exceeded")
+                raise Exception(_("file size exceeds"))
+            if utils.get_img_type(binary) == utils.ImageMime.UNKNOWN:
+                raise Exception(_("unsupported file type"))
 
             fileinfo = json.decode(self.request.environ.get('HTTP_CONTENT_DISPOSITION','{}'))
             logging.info(fileinfo)
 
             file_name = fileinfo.get("file_name")
             if not file_name:
-                raise Exception("no file name")
+                raise Exception(_("no file name"))
             file_name = cgi.escape(file_name)
             result["file_name"] = file_name
 
             album_name = fileinfo.get("album_name")
             album = model.DBAlbum.get_album_by_name(album_name)
             if not album:
-                raise Exception("can not found album %s"%album_name)
+                raise Exception(_("album not exist"))
 
+            photo = model.DBPhoto.get_photo_by_name(album_name, file_name)
+            if photo:
+                raise Exception(_("photo already exists in this album"))
             photo = model.DBPhoto.create(album_name, file_name, binary, owner=users.get_current_user())
             album.add_photo_to_album(photo)
 
@@ -256,7 +408,7 @@ class AdminUploadPage(myRequestHandler):
         except Exception,e:
             logging.exception("upload file error")
             result["status"] = "error"
-            result["error"] = str(e)
+            result["error"] = force_unicode(e)
 
         self.response.out.write(json.encode(result))
 
@@ -265,7 +417,7 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
     def post(self):
         upload_files = self.get_uploads()
 
-class AdminSettingsPage(myRequestHandler):
+class AdminSettingsPage(ccRequestHandler):
     @requires_site_owner
     def get(self):
         self.response.out.write(render_with_user_and_settings('admin.settings.html', {}))
@@ -275,97 +427,87 @@ class AdminSettingsPage(myRequestHandler):
         default = self.request.get("default")
         clear = self.request.get("clear")
         if save:
-            model.SITE_SETTINGS.save_settings(**self.request.POST)
+            settings = {}
+            settings.update(self.request.POST)
+            settings["enable_watermark"] = bool(settings.get("enable_watermark"))
+            settings["block_referrers"] = bool(settings.get("block_referrers"))
+
+            if settings["enable_watermark"]:
+                watermark = settings.get("watermark","").strip()
+                settings["enable_watermark"] = False
+                if watermark:
+                    watermark_img = utils.get_watermark_img_from_google_chart(watermark)
+                    if watermark_img:
+                        settings["watermark_img"] = watermark_img
+                        settings["enable_watermark"] = True
+            model.SITE_SETTINGS.save_settings(**settings)
         elif default:
             model.DBSiteSettings.reset()
         self.redirect("/admin/settings/")
 
-class LoginPage(myRequestHandler):
+class LoginPage(ccRequestHandler):
     def get(self):
         self.redirect(users.create_login_url(self.request.environ.get("HTTP_REFERER", "/")))
 
 
-class LoginOutPage(myRequestHandler):
+class LoginOutPage(ccRequestHandler):
     def get(self):
-        self.redirect(users.create_logout_url("/"))
+        self.redirect(users.create_logout_url(self.request.environ.get("HTTP_REFERER", "/")))
 
 #photos pages
-class MainPage(myRequestHandler):
+class MainPage(ccRequestHandler):
     def get(self):
+        lang = self.request.get("lang")
+        if lang:
+            cookie = save_current_lang(lang, self.response)
+            self.redirect(self.request.environ.get("HTTP_REFERER", "/"))
         albums, albums_cursor = get_all_albums(pagesize=model.SITE_SETTINGS.albums_per_page)
         context = {"albums": albums,
                    "albums_cursor": albums_cursor,
+                   "latestphotos": model.DBPhoto.get_latest_photos(model.SITE_SETTINGS.latest_photos_count),
                    "is_last_page": len(albums) < model.SITE_SETTINGS.albums_per_page
                    }
         self.response.out.write(render_with_user_and_settings('index.html', context))
 
 
-class AlbumPage(myRequestHandler):
+class AlbumPage(ccRequestHandler):
     def get(self, albumname):
-        albumname = unicode(albumname, 'utf-8')
+        albumname = force_unicode(albumname)
         album = model.DBAlbum.get_album_by_name(albumname)
-        if not album:
-            raise Exception("album not exist")
+        if not album or (not album.public and not check_admin_auth()):
+            raise Exception(_("album not exist"))
         photo_per_page = model.SITE_SETTINGS.thumbs_per_page
         context = {"album": album,
                    "last_page": (album.photocount-1)/photo_per_page,
                    "photo_per_page": photo_per_page,
                    "cur_page": 0,
                    "photos": model.DBPhoto.get_by_key_name(album.photoslist[:photo_per_page])
-                   }
+        }
         self.response.out.write(render_with_user_and_settings('album.html', context))
 
-CACHE_TIME = 3600*24*30
-def get_blob_info_from_cache(albumname, photoname, type="photo"):
-    key = "%s_%s_%s"%(type, albumname, photoname)
-    blob_info = memcache.get(key)
-    if not blob_info:
-        photo = model.DBPhoto.get_photo_by_name(albumname, photoname)
-        if photo:
-            if type == "photo":
-                blob_info = blobstore.BlobInfo.get(photo.blob_key)
-            else:
-                blob_info = blobstore.BlobInfo.get(photo.thumb_blob_key)
-            if blob_info:
-                memcache.set(key, blob_info)
-    return blob_info
-
-class PhotoPage(myRequestHandler, blobstore_handlers.BlobstoreDownloadHandler):
-    def get(self, albumname, photoname):
-        albumname = unicode(albumname, 'utf-8')
-        photoname = unicode(photoname, 'utf-8')
-
-        blob_info = get_blob_info_from_cache(albumname, photoname, "photo")
-        if blob_info:
-            self.response.headers['Date'] = utils.http_date()
-            self.response.headers['Cache-Control'] = 'max-age=%d, public' % CACHE_TIME
-            self.response.headers['Expires'] = utils.http_date(time.time() + CACHE_TIME)
-            self.send_blob(blob_info)
-        else:
-            self.error(404)
-            self.response.out.write('File Not Found')
-
-
-class ThumbPage(myRequestHandler, blobstore_handlers.BlobstoreDownloadHandler):
-    def get(self, albumname, photoname):
-        albumname = unicode(albumname, 'utf-8')
-        photoname = unicode(photoname, 'utf-8')
-
-        blob_info = get_blob_info_from_cache(albumname, photoname, "thumb")
-        if blob_info:
-            self.response.headers['Date'] = utils.http_date()
-            self.response.headers['Cache-Control'] = 'max-age=%d, public' % CACHE_TIME
-            self.response.headers['Expires'] = utils.http_date(time.time() + CACHE_TIME)
-            self.send_blob(blob_info)
-        else:
-            self.error(404)
-            self.response.out.write('File Not Found')
-
-
-class SliderPage(myRequestHandler):
+class SliderPage(ccRequestHandler):
     def get(self, albumname):
-        self.response.out.write("slider --,%s" % (albumname))
+        albumname = force_unicode(albumname)
+        album = model.DBAlbum.get_album_by_name(albumname)
+        if not album or (not album.public and not check_admin_auth()):
+            raise Exception(_("album not exist"))
+        context = {"album": album,
+                   "host_url": self.request.host_url,
+                   "photos": model.DBPhoto.get_by_key_name(album.photoslist)
+        }
+        self.response.out.write(render_with_user_and_settings('slider.html', context))
 
+
+class PhotoPage(ccPhotoRequestHandler):
+    def get(self, albumname, photoname):
+        self.send_photo(force_unicode(albumname), force_unicode(photoname), "photo")
+
+
+class ThumbPage(ccPhotoRequestHandler):
+    def get(self, albumname, photoname):
+        self.send_photo(force_unicode(albumname), force_unicode(photoname), "thumb")
+
+RESERVED_ALBUM_NAME = [u'login', u'logout', u'admin', u'slider']
 app = webapp2.WSGIApplication([
     (r'/', MainPage),
     (r'/login/', LoginPage),
@@ -378,8 +520,10 @@ app = webapp2.WSGIApplication([
     (r'/([^/]*?)/{0,1}', AlbumPage),
     (r'/([^/]*?)/([^/]*?)/thumb/{0,1}', ThumbPage),
     (r'/([^/]*?)/([^/]*?)', PhotoPage),
-],
-    debug=True)
+], debug=True)
 
-if __name__ == '__main__':
-    pass
+def main():
+    logging.info("call main()")
+
+if __name__ in ['__main__', 'main']:
+    main()

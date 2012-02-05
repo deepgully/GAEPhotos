@@ -5,7 +5,7 @@
     var file_uploaded = 0;
     var file_total=0;
     var album_name="";
-
+    var album_photoslist = [];
 
     function upload_files(){
         var files = $("#filesToUpload")[0].files;
@@ -17,14 +17,24 @@
         reset_ui();
         update_status();
 
-        $.each(files, function(index, f) {
-             if( add_file_to_queue(f) == true) {
-                 upload_file(f);
-             } else {
-                 file_uploaded++;
-                 update_status();
-             }
-        });
+        $.post('/admin/ajax/',
+                {'action': 'get_album',
+                 'album_name': album_name
+                },
+                function(res){
+                    album_photoslist = [];
+                    if (res.status=='ok') {
+                        album_photoslist = res.album.photoslist;
+                    }
+                    $.each(files, function(index, f) {
+                        if( add_file_to_queue(f) == true) {
+                            upload_file(f);
+                        } else {
+                            file_uploaded++;
+                            update_status();
+                        }
+                    });
+                }, "json");
     };
 
     function reset_ui(){
@@ -35,7 +45,7 @@
     }
 
     function update_status(){
-        $("#divStatus").html( "[{0}/{1}]  {{ _('Photos are uploading to album') }} {2}".format(
+        $("#divStatus").html( '[{0}/{1}]  {{ _("Photos are uploading to album") }} <a href="/{2}/" target="_blank">{2}</a>'.format(
                 file_uploaded, file_total, album_name) );
         if(file_uploaded >= file_total){
             $("#albumsSelect").removeAttr("disabled");
@@ -44,13 +54,19 @@
     }
 
     function add_file_to_queue(f){
+        var photo_key_name = 'dbphoto/{0}/{1}'.format(album_name, f.name);
+        if ($.inArray(photo_key_name, album_photoslist) != -1){
+            $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1} M, {2}</li>'.format(
+                    f.name, (f.size/1000/1000).toFixed(2), "{{ _('photo already exists in this album') }}"));
+            return false;
+        }
         if (f.size/1000/1000 > {{ settings.max_upload_size }}){
             $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1} M, {2}</li>'.format(
-                    f.name, (f.size/1000/1000).toFixed(2), '{{ _("size exceed") }}'));
+                    f.name, (f.size/1000/1000).toFixed(2), "{{ _('file size exceeds') }}"));
             return false;
         } else {
             $("#upload_files_container").append('<li name="{0}"> {0}, {1} M, {2}</li>'.format(
-                    f.name, (f.size/1000/1000).toFixed(2), '{{ _("uploading...") }}'));
+                    f.name, (f.size/1000/1000).toFixed(2), "{{ _('uploading') }}..."));
             return true;
         }
     };
@@ -80,13 +96,12 @@
                 progress_bar.width(file_uploader.outerWidth() * percentage/100);
                 progress_bar.text(percentage+'%');
                 if (percentage >= 100) {
-                    progress_bar.text('{{ _("Done") }}');
+                    progress_bar.text("{{ _('Done') }}");
                 }
             }
         }, false);
         xhr.upload.addEventListener("error", function(error) {
-            window.console.log("error: " + error.code);
-            progress_bar.text('{{ _("Error") }} ' + error.code);
+            progress_bar.text('{{ _("Error") }}: ' + error.code);
             progress_bar.addClass("error");
             file_uploaded++;
             update_status();
@@ -99,7 +114,7 @@
                     var resp = window.JSON.parse(xhr.responseText);
                     if (resp.status=='ok'){
                         file_uploader.html("{0}, {1} M, {2}".format(resp.file_name,
-                                (file.size/1000/1000).toFixed(2), '{{ _("Done") }}'));
+                                (file.size/1000/1000).toFixed(2), "{{ _('Done') }}"));
                     } else {
                         progress_bar.text('{{ _("Error") }} ' + resp.error);
                         progress_bar.addClass("error");
@@ -143,7 +158,7 @@
     <div id="divStatus"></div>
     <div style="clear: both;"></div>
     <div class="fieldset" id="fsUploadProgress">
-        <span class="legend">{{ _('Photos Queue') }}</span>
+        <span class="legend">{{ _("Photos Queue") }}</span>
         <div id="upload_files_container"></div>
     </div>
 {% else %}
