@@ -76,7 +76,7 @@
             $("div#album",album_li).append($( ('<div>{0}</div>' +
                     '<div id="cover"><a href="/{1}/"><img src="{2}"/></a></div>' +
                     '<div class="description">{3}</div>' +
-                    '<textarea class="edit_description" rows="2" style="display: none;">{3}</textarea>').format(
+                    '<textarea maxlength="70" class="edit_description" rows="2" style="display: none;">{3}</textarea>').format(
                     formatutc(new Date(album.createdate), 'yyyy-MM-dd'), album.name.escape(),
                     album.cover_url, album.description.escape() )));
             album_li.fadeIn(1000);
@@ -166,13 +166,13 @@
                 {% for album in albums %}
                     <li name="album" album="{{album.name}}" page="0">
                         <div id="album">
-                            <div><a href="/{{album.name}}/">{{album.name}}({{album.photocount}})</a>
+                            <div><a href="/{{album.name}}/">{{album.name|truncate(20,True)}}({{album.photocount}})</a>
                                 {% if not album.public %} ({{ _("private") }}) {% endif %}
                             </div>
                             <div>{{album.updatedate|date}}</div>
                             <div id="cover"><a href="/{{album.name}}/"><img src="{{ album.cover_url }}"/></a></div>
-                            <div class="description">{{album.description}}</div>
-                            <textarea class="edit_description" rows="2" style="display: none;">{{album.description}}</textarea>
+                            <div class="description">{{album.description|truncate(70,True)}}</div>
+                            <textarea class="edit_description" rows="2" maxlength="70" style="display: none;">{{album.description}}</textarea>
                         </div>
                         {% if users.is_owner %}<a class="close">x</a>{% endif %}
                     </li>

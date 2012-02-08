@@ -863,7 +863,49 @@
 				}
 				
 				return this;
-			}
+			},
+
+            bind_key: function(){
+                $(document).keydown(function(e) {
+                    var key = e.charCode ? e.charCode : e.keyCode ? e.keyCode : 0;
+                    switch(key) {
+                        case 32: // space
+                            gallery.next();
+                            e.preventDefault();
+                            break;
+                        case 33: // Page Up
+                            gallery.previousPage();
+                            e.preventDefault();
+                            break;
+                        case 34: // Page Down
+                            gallery.nextPage();
+                            e.preventDefault();
+                            break;
+                        case 35: // End
+                            gallery.gotoIndex(gallery.data.length-1);
+                            e.preventDefault();
+                            break;
+                        case 36: // Home
+                            gallery.gotoIndex(0);
+                            e.preventDefault();
+                            break;
+                        case 75:  // K
+                        case 37: // left arrow
+                            gallery.previous();
+                            e.preventDefault();
+                            break;
+                        case 74: // J
+                        case 39: // right arrow
+                            gallery.next();
+                            e.preventDefault();
+                            break;
+                    }
+                });
+            },
+
+            unbind_key: function(){
+                $(document).unbind("keydown");
+            }
 		});
 
 		// Now initialize the gallery
@@ -937,41 +979,7 @@
 
 		// Setup Keyboard Navigation
 		if (this.enableKeyboardNavigation) {
-			$(document).keydown(function(e) {
-				var key = e.charCode ? e.charCode : e.keyCode ? e.keyCode : 0;
-				switch(key) {
-					case 32: // space
-						gallery.next();
-						e.preventDefault();
-						break;
-					case 33: // Page Up
-						gallery.previousPage();
-						e.preventDefault();
-						break;
-					case 34: // Page Down
-						gallery.nextPage();
-						e.preventDefault();
-						break;
-					case 35: // End
-						gallery.gotoIndex(gallery.data.length-1);
-						e.preventDefault();
-						break;
-					case 36: // Home
-						gallery.gotoIndex(0);
-						e.preventDefault();
-						break;
-                    case 75:  // K
-					case 37: // left arrow
-						gallery.previous();
-						e.preventDefault();
-						break;
-                    case 74: // J
-					case 39: // right arrow
-						gallery.next();
-						e.preventDefault();
-						break;
-				}
-			});
+			this.bind_key();
 		}
 
 		// Auto start the slideshow

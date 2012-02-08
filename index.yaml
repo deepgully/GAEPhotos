@@ -15,3 +15,9 @@ indexes:
   - name: public
   - name: createdate
     direction: desc
+
+- kind: DBComment
+  properties:
+  - name: public
+  - name: date
+    direction: desc

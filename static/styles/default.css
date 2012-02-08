@@ -130,7 +130,6 @@ a img {
     background: none repeat scroll 0 0 #C6C6C6;
     margin: 0px;
     padding: 5px;
-    width: 160px;
     z-index: 200;
 }
 
@@ -338,19 +337,66 @@ a img {
 }
 
 /* Comment */
-#comment {
-    -moz-border-radius-bottomleft: 3px;
-    -moz-border-radius-bottomright: 3px;
-    -moz-border-radius-topleft: 3px;
-    -moz-border-radius-topright: 3px;
-    width: 700px;
-    float: left;
+#comments {
+    border-radius: 2px;
     text-align: left;
-    padding: 10px;
-    border: 1px solid #cccccc;
-    overflow: hidden;
+    border: 1px solid #cfcfcf;
+    background-color: #FBFBFB;
+    width: 976px;
+    float: left;
 }
+#comment_list {
+    float: left;
+    width: 100%;
+}
+#comment_list li{
+    display: block;
+    clear: both;
+    padding: 10px 10px 6px 10px;
+    float: left;
+    width: 97%;
+    border-top: 1px solid #e0e0e0;
+}
+#comment_list div{
+    float: left;
+}
+#comment_list .avatar {
+    width: 32px;
+    height: 32px;
+    border: none;
+    float: left;
+    margin-right: 10px;
+}
+#comment_list .comment {
+    width: 61%;
+}
+#comment_list .name {
+    width: 100%;
+    font-weight: bold;
 
+}
+#comment_list .comment_content {
+    width: 100%;
+    padding-top: 2px;
+    text-align: left;
+}
+#new_comment {
+    border: 1px solid #cccccc;
+    float: left;
+    margin-left: 10px;
+    width: 324px;
+}
+#submit_comment {
+    float: left;
+    clear: both;
+    margin-left: 10px;
+}
+.comment_photo{
+    max-width: 60px;
+    max-height: 45px;
+    float: right;
+}
+/*
 #addcomment {
     font-size: 1.2em;
     font-weight: bold;
@@ -389,7 +435,7 @@ a img {
     text-decoration: underline;
     color: #333333;
 }
-
+*/
 /* Pager */
 #pager {
     width: 32px;
@@ -398,7 +444,7 @@ a img {
 /* Latest */
 #latest_comment_container {
     width: 380px;
-    margin-right: 20px;
+    margin-right: 15px;
     float: right;
 }
 
@@ -566,9 +612,13 @@ fieldset {
 }
 
 #tips {
-    float: left;
-    margin: 5px 0 0 15px;
-    color: red;
+    overflow: hidden;
+    font: message-box;
+    background-color: InfoBackground;
+    border: 1px solid #C5B270;
+    position: relative;
+    padding: 3px;
+    font-size: 1em;
 }
 
 /* upload page */

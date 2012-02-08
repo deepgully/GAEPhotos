@@ -53,6 +53,13 @@
                 syncTransitions:           true,
                 defaultTransitionDuration: 900,
                 onSlideChange:             function(prevIndex, nextIndex) {
+                    $("#original_photo").attr('href', this.data[nextIndex].slideUrl);
+
+                {% if settings.enable_comment %}
+                    clean_comments();
+                    get_all_comments("{{ album.name }}", this.data[nextIndex].title);
+                {% endif %}
+
                     $('#thumbs ul.thumbs').children()
                             .eq(prevIndex).fadeTo('fast', onMouseOutOpacity).end()
                             .eq(nextIndex).fadeTo('fast', 1.0);
@@ -130,6 +137,74 @@
                 $.growlUI("{{ _('Photo link copied to Clipboard') }}", "");
             } );
             clip.glue("copylink");
+
+
+        {% if settings.enable_comment %}
+            $("#new_comment").focusin(function(){
+                $(this).attr("rows", 3);
+                gallery.unbind_key();
+            });
+            $("#new_comment").focusout(function(){
+                gallery.bind_key();
+            });
+            $("#submit_comment").click(function(){
+                var comment = $("#new_comment").val().replace(/(^\s*)|(\s*$)/g, "");
+                if(comment.length <=0 ){
+                    $.growlUI('{{ _("Pls input content") }}');
+                    return false;
+                }
+                var album_name = "{{ album.name }}",
+                    photo_name = gallery.currentImage.title;
+
+                $.post('/admin/ajax/',
+                    {'action': 'create_comment',
+                     'album_name': album_name,
+                     'photo_name': photo_name,
+                     'comment': comment
+                    },
+                    function(res){
+                        if (res.status=='ok') {
+                            insert_comment(res.comment);
+                            $("#new_comment").attr("rows", 1);
+                            $("#new_comment").val("");
+                            $.growlUI("{{ _('Comment Added') }}", "");
+                        } else {
+                            alert('error: '+res.error);
+                        }
+                    }, "json");
+            });
+            function clean_comments(){
+                $("#comment_list").empty();
+                $("#new_comment").attr("rows", 1);
+                $("#new_comment").val("");
+            };
+            function get_all_comments(album_name, photo_name){
+                $.post('/admin/ajax/',
+                   {'action': 'get_comments',
+                    'album_name': album_name,
+                    'photo_name': photo_name
+                    },
+                    function(res){
+                        if (res.status=='ok') {
+                            var count = res.comments.length;
+                            for(var i=0; i< count; i++){
+                                insert_comment(res.comments[i]);
+                            }
+                        } else {
+                            alert('error: '+res.error);
+                        }
+                    }, "json");
+            };
+            function insert_comment(comment){
+                var new_comment = $("#comment_template").clone();
+                $("img",new_comment).attr("src", comment.avatar_url);
+                $(".name",new_comment).html("{0} {1}".format(comment.author, formatutc(new Date(comment.date), 'yyyy-MM-dd hh:mm')));
+                $(".comment_content",new_comment).html(comment.content);
+
+                $("#comment_list").append(new_comment);
+                new_comment.show();
+            };
+        {% endif %}
         });
     </script>
 {% endblock %}
@@ -140,6 +215,8 @@
 {% endblock %}
 
 {% block commandbar %}
+    <li>|</li>
+    <li><a id="original_photo" target="_blank" href="#">{{ _('Original Photo') }}</a></li>
     <li>|</li>
     <li><a id="copylink" href="javascript:void();">{{ _('Copy Photo Link') }}</a></li>
 {% endblock %}
@@ -177,6 +254,21 @@
             <div id="loading" class="loader"></div>
             <div id="slideshow" class="slideshow"></div>
         </div>
+        {% if settings.enable_comment %}
+        <div id="comments">
+            <li id="comment_template" style="display: none">
+                <div><img class="avatar" src=""></div>
+                <div class="comment">
+                    <div class="name"></div>
+                    <div class="comment_content"></div>
+                </div>
+            </li>
+            <div id="comment_list">
+            </div>
+            <textarea name="new_comment" id="new_comment" rows="1" maxlength="140"></textarea><br/>
+            <button id="submit_comment">{{ _('submit comment') }}</button>
+        </div>
+        {% endif %}
     </div>
 </div>
 <!-- end content -->

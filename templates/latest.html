@@ -1,4 +1,13 @@
+{% if settings.enable_comment %}
+{% block head_ex %}
+    <style type="text/css">
+        #latest_photo_container { width: 515px; margin-left: 15px;}
+        #comment_list .comment { width: 260px; }
+    </style>
+{% endblock %}
+{% endif %}
 <hr/>
+
 {% if latestphotos %}
 <fieldset id="latest_photo_container">
 <legend class="legend">{{ _("Latest Photos") }}</legend>
@@ -6,9 +15,29 @@
 {% for photo in latestphotos %}
 <div id="latest_photo_thumb">
 <a href="/slider/{{photo.album_name}}/#{{photo.photo_name}}"><img src="/{{photo.album_name}}/{{photo.photo_name}}/thumb/"/></a>
-<div class="description2">{{photo.description}}</div>
+<div class="description2">{{photo.description|truncate(20,True)}}</div>
 </div>
 {% endfor %}
 </div>
+</fieldset>
+{% endif %}
+
+{% if settings.enable_comment %}
+<fieldset id="latest_comment_container">
+    <legend class="legend">{{ _("Latest Comments") }}</legend>
+    <div id="comment_list">
+        {% for comment in latestcomments %}
+            <li>
+                <div><img class="avatar" src="{{ comment.avatar_url }}"/></div>
+                <div class="comment">
+                    <div class="name">{{ comment.author }} {{ comment.date|date('%Y-%m-%d %H:%M') }} </div>
+                    <div class="comment_content">&nbsp;{{ comment.content|truncate(140,True) }}</div>
+                </div>
+                <a href="{{ comment.slide_url }}">
+                <img class="comment_photo" src="{{ comment.thumb_url }}"/>
+                </a>
+            </li>
+        {% endfor %}
+    </div>
 </fieldset>
 {% endif %}

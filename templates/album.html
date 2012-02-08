@@ -77,7 +77,7 @@
             {% else %}
             thumb_div.append($('<div class="description">{0}</div>'.format(photo.description)));
             {% endif %}
-            thumb_div.append($('<textarea class="edit_description" rows="2" style="display: none;">{0}</textarea>'.format(photo.description)));
+            thumb_div.append($('<textarea maxlength="70" class="edit_description" rows="2" style="display: none;">{0}</textarea>'.format(photo.description)));
 
             $("#content").append(thumb_div);
             thumb_div.fadeIn(1000);
@@ -226,7 +226,7 @@
                                     {{photo.description}}
                                 {% endif %}
                             </div>
-                            <textarea class="edit_description" rows="2" style="display: none;">{{photo.description}}</textarea>
+                            <textarea maxlength="70" class="edit_description" rows="2" style="display: none;">{{photo.description}}</textarea>
                         </div>
                     {% endfor %}
                 {% endif %}

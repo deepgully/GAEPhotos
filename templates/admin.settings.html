@@ -4,6 +4,13 @@
 <script type="text/javascript" src="/static/js/jquery.blockUI.js"></script>
 <script type="text/javascript">
 $(document).ready(function() {
+    $("#enable_comment").change(function(){
+        if($(this).attr('checked')){
+            $("#latest_comments_count").show().focus();
+        } else {
+            $("#latest_comments_count").hide();
+        }
+    });
     $("#watermark_enable").change(function(){
         if($(this).attr('checked')){
             $("#watermark").show().focus();
@@ -52,11 +59,14 @@ $(document).ready(function() {
             <td><input id="latest_photos_count" name="latest_photos_count" type="text" size="20" value="{{settings.latest_photos_count}}"/>
             </td>
        </tr>
-       <!--tr>
+       <tr>
             <th scope="row">{{ _("Latest Comments Count") }}:</th>
-            <td><input id="latest_comments_count" name="latest_comments_count" type="text" size="20" value="{{settings.latest_comments_count}}"/>
+            <td><input type="checkbox" id="enable_comment" name="enable_comment"
+                       {% if settings.enable_comment %}checked{% endif %} />{{ _("Enable Comments") }}
+                <br/><input id="latest_comments_count" name="latest_comments_count" type="text" size="20" value="{{settings.latest_comments_count}}"
+                   {% if not settings.enable_comment %}style="display: none;"{% endif %}/>
             </td>
-       </tr-->
+       </tr>
        <tr>
             <th scope="row">{{ _("Max Upload Size") }}(M):</th>
             <td><input id="max_upload_size" name="max_upload_size" type="text" size="20" value="{{settings.max_upload_size}}"/>

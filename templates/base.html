@@ -32,7 +32,8 @@ formatutc = function(date, format){
     /*
      * eg:format="yyyy-MM-dd hh:mm:ss";
      */
-    localDate = date - (date.getTimezoneOffset() * 60);
+    date = new Date(date);
+    var localDate = date - date.getTimezoneOffset()*60;
     localDate = new Date(localDate);
     var o = {
         "M+" :  localDate.getMonth()+1,  //month
@@ -58,14 +59,14 @@ formatutc = function(date, format){
 $(document).ready(function() {
 {% if users.is_admin %}
     $('#btncreate').click(function() {
-        $.blockUI({ message: $('#create_album')});
+        $.blockUI({ message: $('#create_album'), css: { width: '450px' } });
     });
     $('#cancel').click(function() {
         $.unblockUI();
     });
     $('#create').click(function() {
         var new_name = $('#new_name').val();
-        if (/[#?\$%\^&\*\/\\<>]+/g.test(new_name)){
+        if (/[#?\$%\^&\*\/\\<>,;]+/g.test(new_name)){
             alert('{{ _("invalid character in album name") }}');
             return;
         }
@@ -85,6 +86,10 @@ $(document).ready(function() {
                 }, "json");
     });
 {% endif %}
+    $('#dropmenu').hover(
+            function() { $('ul', this).show(); },
+            function() { $('ul', this).hide(); }
+    );
 });
 </script>
 {% block head_ex %} {% endblock %}
@@ -111,16 +116,25 @@ $(document).ready(function() {
 <div id="menu">
    <div id="navigation">
        <ul>
-        <li>
+        <li id="dropmenu">
 		  <a href="/">{{ _('All Albums') }}</a>
+            {% if allalbums %}
+                <ul>
+                    {% for ab in allalbums %}
+                        <li><a href="/{{ab.name}}/">{{ab.name|truncate(20,True)}}
+                            {% if not ab.public %} ({{ _("private") }}) {% endif %}
+                        </a></li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
 		</li> 
         {% if album %}
         <li>&gt;&gt;</li>
-        <li><a href="/{{album.name}}/">{{album.name}}</a> </li>
+        <li><a href="/{{album.name}}/">{{album.name|truncate(20,True)}}</a> </li>
         {% endif %}
         {% if photo %}
         <li>&gt;&gt;</li>
-        <li><a href="/{{album.name}}/{{photo.name}}">{{photo.name}}</a> </li>
+        <li><a href="/{{album.name}}/{{photo.name}}">{{photo.name|truncate(20,True)}}</a> </li>
         {% endif %}
         {% block ex_navigation %} {% endblock %}
        </ul>
@@ -156,7 +170,7 @@ $(document).ready(function() {
     <h2>{{ _('Create Album') }}</h2>
     <table id="admin_table" style="width: 100%;">
         <tr>
-            <th scope="row" style="width: 100px;">{{ _('Album Name') }}:</th>
+            <th scope="row" style="width: 120px;">{{ _('Album Name') }}:</th>
             <td style="text-align: left;">
                 <input id="new_name" name="new_name" type="text" size="18" value=""/>
                 <input id="new_public" type="radio" name="new_public" value="true" checked>{{ _("public") }}</input>
@@ -164,7 +178,7 @@ $(document).ready(function() {
             </td>
         </tr>
         <tr>
-            <th scope="row" style="width: 100px;">{{ _('Description') }}:</th>
+            <th scope="row" style="width: 120px;">{{ _('Description') }}:</th>
             <td style="text-align: left;"> <input id="new_description" name="new_description" type="text" size="30" value=""/> </td>
         </tr>
     </table>
