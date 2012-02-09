@@ -55,16 +55,15 @@
                 onSlideChange:             function(prevIndex, nextIndex) {
                     $("#original_photo").attr('href', this.data[nextIndex].slideUrl);
 
-                {% if settings.enable_comment %}
-                    clean_comments();
-                    get_all_comments("{{ album.name }}", this.data[nextIndex].title);
-                {% endif %}
-
                     $('#thumbs ul.thumbs').children()
                             .eq(prevIndex).fadeTo('fast', onMouseOutOpacity).end()
                             .eq(nextIndex).fadeTo('fast', 1.0);
 
                     $('#page').find('div.photo-index').html('{{ _("Photo") }} '+ (nextIndex+1) +'/'+ this.data.length);
+                    {% if settings.enable_comment %}
+                        clean_comments();
+                        get_all_comments("{{ album.name }}", this.data[nextIndex].title);
+                    {% endif %}
                 },onPageTransitionOut:       function(callback) {
                     $('#thumbs ul.thumbs').fadeTo('fast', 0.0, callback);
                 },
@@ -148,7 +147,7 @@
                 gallery.bind_key();
             });
             $("#submit_comment").click(function(){
-                var comment = $("#new_comment").val().replace(/(^\s*)|(\s*$)/g, "");
+                var comment = $("#new_comment").val().replace(/(^\s*)|(\s*$)/g, "").escape();
                 if(comment.length <=0 ){
                     $.growlUI('{{ _("Pls input content") }}');
                     return false;
@@ -198,11 +197,37 @@
             function insert_comment(comment){
                 var new_comment = $("#comment_template").clone();
                 $("img",new_comment).attr("src", comment.avatar_url);
-                $(".name",new_comment).html("{0} {1}".format(comment.author, formatutc(new Date(comment.date), 'yyyy-MM-dd hh:mm')));
-                $(".comment_content",new_comment).html(comment.content);
+            {% if users.is_owner %}
+                $(".name",new_comment).html('{0} {1} <a href="javascript:;">{{ _("Delete") }}</a>'.format(comment.author,
+                        formatutc(comment.date,'yyyy-MM-dd hh:mm')));
+            {% else %}
+                $(".name",new_comment).html("{0} {1}".format(comment.author,
+                        formatutc(comment.date,'yyyy-MM-dd hh:mm')));
+            {% endif %}
+                $(".comment_content",new_comment).html(comment.content.escape());
 
                 $("#comment_list").append(new_comment);
                 new_comment.show();
+            {% if users.is_owner %}
+                $("a",new_comment).click(function(){
+                    if(! confirm("{{ _('Are you sure delete this comment?')}}"))
+                    {
+                        return false;
+                    }
+                    $.post('/admin/ajax/',
+                        {'action': 'delete_comment_by_id',
+                         'comment_id': comment.id
+                        },
+                        function(res){
+                            if (res.status=='ok') {
+                                $.growlUI("{{ _('Comment Deleted') }}", "");
+                                new_comment.remove();
+                            } else {
+                                alert('error: '+res.error);
+                            }
+                        }, "json");
+                });
+            {% endif %}
             };
         {% endif %}
         });
@@ -218,7 +243,7 @@
     <li>|</li>
     <li><a id="original_photo" target="_blank" href="#">{{ _('Original Photo') }}</a></li>
     <li>|</li>
-    <li><a id="copylink" href="javascript:void();">{{ _('Copy Photo Link') }}</a></li>
+    <li><a id="copylink" href="javascript:;">{{ _('Copy Photo Link') }}</a></li>
 {% endblock %}
 
 {% block page %}

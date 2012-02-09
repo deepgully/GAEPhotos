@@ -1,3 +1,9 @@
 # Disallow all
 User-agent: *
 Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: Sosospider
+Disallow: /

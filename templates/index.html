@@ -77,7 +77,7 @@
                     '<div id="cover"><a href="/{1}/"><img src="{2}"/></a></div>' +
                     '<div class="description">{3}</div>' +
                     '<textarea maxlength="70" class="edit_description" rows="2" style="display: none;">{3}</textarea>').format(
-                    formatutc(new Date(album.createdate), 'yyyy-MM-dd'), album.name.escape(),
+                    formatutc(album.createdate, 'yyyy-MM-dd'), album.name.escape(),
                     album.cover_url, album.description.escape() )));
             album_li.fadeIn(1000);
         }

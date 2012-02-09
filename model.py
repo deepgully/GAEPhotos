@@ -4,6 +4,7 @@ from google.appengine.ext import db
 from google.appengine.api import images
 from google.appengine.api import datastore
 from google.appengine.api import blobstore
+from google.appengine.runtime import DeadlineExceededError
 
 import utils
 
@@ -28,6 +29,12 @@ def remove(keys):
     keys, _ = datastore.NormalizeAndTypeCheckKeys(keys)
     return [_db_get_cache.pop(k) for k in keys if k in _db_get_cache]
 
+
+def call_method_with_list(method, keylist, page=8):
+    import math
+    pages = long(math.ceil(len(keylist)/float(page)))
+    for i in xrange(pages):
+        method(keylist[(i-1)*page:i*page])
 
 class DBParent(db.Model):
     pass
@@ -140,7 +147,7 @@ class DBSiteSettings(BaseModel):
     latest_photos_count = db.IntegerProperty(default=9)
     latest_comments_count = db.IntegerProperty(default=8)
     max_upload_size = db.FloatProperty(default=2.0)  #max size(M)
-    enable_comment = db.BooleanProperty(default=False)
+    enable_comment = db.BooleanProperty(default=True)
     enable_watermark = db.BooleanProperty(default=False)
     watermark = db.StringProperty(default="@GAEPhotos")
     watermark_img = db.BlobProperty()
@@ -300,8 +307,18 @@ class DBAlbum(BaseModel):
             return len(photo_keys)
 
         count = db.run_in_transaction(txn)
-        blobstore.delete(blob_keys)
-        blobstore.delete(thumb_blob_keys)
+        try:
+            call_method_with_list(blobstore.delete, blob_keys, 8)
+        except DeadlineExceededError:
+            call_method_with_list(blobstore.delete, blob_keys, 2)
+        except:
+            logging.exception("delete blob")
+        try:
+            call_method_with_list(blobstore.delete, thumb_blob_keys, 8)
+        except DeadlineExceededError:
+            call_method_with_list(blobstore.delete, thumb_blob_keys, 2)
+        except:
+            logging.exception("delete thumb blob")
         return count
 
     def set_cover_photo(self, photo_name):
@@ -319,8 +336,8 @@ class DBAlbum(BaseModel):
             "owner": (self.owner and self.owner.nickname()) or "",
             "description": self.description,
             "public": self.public,
-            "createdate": self.createdate.isoformat()[:-7],
-            "updatedate": self.updatedate.isoformat()[:-7],
+            "createdate": self.createdate.isoformat(),
+            "updatedate": self.updatedate.isoformat(),
             "photoslist": self.photoslist,
             "cover_url": self.cover_url,
             "photocount": self.photocount,
@@ -331,6 +348,7 @@ class DBPhoto(BaseModel):
     key_template = "dbphoto/%(album_name)s/%(photo_name)s"
     album_name = db.StringProperty()
     photo_name = db.StringProperty()
+    public = db.BooleanProperty(default=False)
     owner = db.UserProperty()
     mime = db.StringProperty()
     size = db.IntegerProperty()
@@ -349,8 +367,8 @@ class DBPhoto(BaseModel):
         return "%s/%s/%s/thumb/" % (self.site, self.album_name, self.photo_name)
 
     @property
-    def public(self):
-        return DBAlbum.get_album_by_name(self.album_name).public
+    def isPublic(self):
+        return self.public
 
     def remove(self):
         blobstore.delete(self.blod_key)
@@ -364,8 +382,16 @@ class DBPhoto(BaseModel):
         return cls.get_by_key_name(key_name, parent=cls.db_parent)
 
     @classmethod
-    def get_latest_photos(cls, count):
-        return cls.all().order("-createdate").fetch(count)
+    def get_latest_photos(cls, count, is_admin=False):
+        if is_admin:
+            return cls.all().order("-createdate").fetch(count)
+        else:
+            return cls.all().order("-createdate").filter("public =", True).fetch(count)
+
+    @classmethod
+    def get_names_from_key_name(cls, key_name):
+        names = key_name.split('/')
+        return names[1], names[2]
 
     @classmethod
     def get_url_from_keyname(cls, key_name):
@@ -405,12 +431,13 @@ class DBPhoto(BaseModel):
             "photo_name": self.photo_name,
             "album_name": self.album_name,
             "owner": (self.owner and self.owner.nickname()) or "",
-            "createdate": self.createdate.isoformat()[:-7],
+            "createdate": self.createdate.isoformat(),
             "description": self.description,
             "mime": self.mime,
             "size": self.size,
             "url": self.url,
             "thumb_url": self.thumb_url,
+            "public": self.public,
             }
 
 
@@ -448,6 +475,16 @@ class DBComment(BaseModel):
         db.delete(comment_keys)
 
     @classmethod
+    def del_comment_by_id(cls, comment_id):
+        comment = DBComment.get_by_id(comment_id)
+        if comment:
+            photo_key_name = comment.photo_key_name
+            remove(comment.key())
+            comment.delete()
+            return DBPhoto.get_names_from_key_name(photo_key_name)
+        return None
+
+    @classmethod
     def get_latest_comments(cls, count, public=None):
         if public:
             return cls.all().filter("public =", True).order("-date").fetch(count)
@@ -473,13 +510,14 @@ class DBComment(BaseModel):
 
     def to_dict(self):
         return {
+            "id": self.id,
             "photo_key_name": self.photo_key_name,
             "photo_url": self.photo_url,
             "thumb_url": self.thumb_url,
             "author": self.author,
             "avatar_url": self.avatar_url,
             "content": self.content,
-            "date": self.date.isoformat()[:-7],
+            "date": self.date.isoformat(),
             "public": self.public,
             }
 

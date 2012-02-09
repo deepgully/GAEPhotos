@@ -8,7 +8,6 @@
 {% endif %}
 <hr/>
 
-{% if latestphotos %}
 <fieldset id="latest_photo_container">
 <legend class="legend">{{ _("Latest Photos") }}</legend>
 <div>
@@ -20,7 +19,6 @@
 {% endfor %}
 </div>
 </fieldset>
-{% endif %}
 
 {% if settings.enable_comment %}
 <fieldset id="latest_comment_container">

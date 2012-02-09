@@ -237,6 +237,7 @@ def ajax_delete_album(album_name):
 
 MAX_ALBUM_NAME = 30
 MAX_DESCRIPTION = 50
+MAX_COMMENT = 140
 
 @requires_site_admin
 def ajax_create_album(name, description="description", public=True):
@@ -314,6 +315,8 @@ def ajax_save_album(name, description, **kwds):
     album = model.DBAlbum.get_album_by_name(name)
     if album:
         description = cgi.escape(description.strip())
+        if len(description) > MAX_DESCRIPTION:
+            raise Exception(__("album description too long[max %0 chars]", MAX_DESCRIPTION))
         album = album.save_settings(description=description, **kwds)
         res["album"] = album.to_dict()
         res["status"] = "ok"
@@ -376,6 +379,9 @@ def ajax_get_upload_url():
 def ajax_create_comment(album_name, photo_name, comment):
     res = ERROR_RES.copy()
     user = users.get_current_user()
+    comment = cgi.escape(comment.strip())
+    if len(comment) > MAX_COMMENT:
+        raise Exception(__("comment too long, max %0 chars", MAX_COMMENT))
     comment = model.DBComment.create(album_name, photo_name, comment, author=user.nickname(), email=user.email())
 
     key = "comment_%s_%s"%(album_name, photo_name)
@@ -392,6 +398,21 @@ def ajax_delete_comments(album_name, photo_name):
     key = "comment_%s_%s"%(album_name, photo_name)
     memcache.delete(key)
     res["status"] = "ok"
+    return res
+
+@requires_site_owner
+def ajax_delete_comment_by_id(comment_id):
+    res = ERROR_RES.copy()
+    comment_id = long(comment_id)
+    result = model.DBComment.del_comment_by_id(comment_id)
+    if result:
+        album_name = result[0]
+        photo_name = result[1]
+        key = "comment_%s_%s"%(album_name, photo_name)
+        memcache.delete(key)
+        res["status"] = "ok"
+    else:
+        res["error"] = _("comment not exist")
     return res
 
 
@@ -426,6 +447,7 @@ AJAX_METHODS = {
     "set_cover_photo": ajax_set_cover_photo,
     "get_comments": ajax_get_comments,
     "delete_comments": ajax_delete_comments,
+    "delete_comment_by_id": ajax_delete_comment_by_id,
     "create_comment": ajax_create_comment,
     }
 
@@ -489,7 +511,8 @@ class AdminUploadPage(ccRequestHandler):
             photo = model.DBPhoto.get_photo_by_name(album_name, file_name)
             if photo:
                 raise Exception(_("photo already exists in this album"))
-            photo = model.DBPhoto.create(album_name, file_name, binary, owner=users.get_current_user())
+            photo = model.DBPhoto.create(album_name, file_name, binary, owner=users.get_current_user(),
+                                        public=album.public)
             album.add_photo_to_album(photo)
 
             result["status"] = "ok"
@@ -557,9 +580,13 @@ class MainPage(ccRequestHandler):
             cookie = save_current_lang(lang, self.response)
             self.redirect(self.request.environ.get("HTTP_REFERER", "/"))
         albums, albums_cursor = get_all_albums(pagesize=model.SITE_SETTINGS.albums_per_page)
+
+        latestphotos = model.DBPhoto.get_latest_photos(model.SITE_SETTINGS.latest_photos_count,
+                    is_admin=check_admin_auth())
+
         context = {"albums": albums,
                    "albums_cursor": albums_cursor,
-                   "latestphotos": model.DBPhoto.get_latest_photos(model.SITE_SETTINGS.latest_photos_count),
+                   "latestphotos": latestphotos,
                    "is_last_page": len(albums) < model.SITE_SETTINGS.albums_per_page
         }
         if model.SITE_SETTINGS.enable_comment:

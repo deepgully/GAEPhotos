@@ -87,6 +87,11 @@ u'submit comment',
 u'Comment Added',
 u'Pls input content',
 u'Support Firefox and Chrome, no IE',
+u'comment not exist',
+u'Delete',
+u'Are you sure delete this comment?',
+u'Comment Deleted',
+u"comment too long, max %0 chars",
 ],
 
 u"zh-cn":
@@ -176,6 +181,11 @@ u'提交评论',
 u'评论已提交',
 u'请输入评论内容',
 u'只支持Firefox和Chrome, 不支持IE',
+u'评论不存在',
+u'删除',
+u'确定要删除这条评论吗?',
+u'评论已删除',
+u"评论太长,最多%0字",
 ],
 }
 
