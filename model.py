@@ -150,6 +150,9 @@ class DBSiteSettings(BaseModel):
     enable_comment = db.BooleanProperty(default=True)
     enable_watermark = db.BooleanProperty(default=False)
     watermark = db.StringProperty(default="@GAEPhotos")
+    watermark_size = db.IntegerProperty(default=20)
+    watermark_position = db.IntegerProperty(default=8)  # images.BOTTOM_RIGHT
+    watermark_opacity = db.FloatProperty(default=0.4)
     watermark_img = db.BlobProperty()
     block_referrers = db.BooleanProperty(default=False)
     unblock_sites_list = db.ListProperty(str, default=[])

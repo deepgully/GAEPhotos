@@ -137,14 +137,16 @@ class ccPhotoRequestHandler(blobstore_handlers.BlobstoreDownloadHandler):
         return blob_info
 
     @staticmethod
-    def create_watermark(binary, watermark, opacity=0.4):
+    def create_watermark(binary, watermark, position=None, opacity=0.4):
         from google.appengine.api import images
 
+        if position == None:
+            position = images.BOTTOM_RIGHT
         img = images.Image(binary)
         width = img.width
         height = img.height
         img = images.composite([(img._image_data, 0, 0, 1.0, images.TOP_LEFT),
-            (watermark, -2, -2, opacity, images.BOTTOM_RIGHT),
+            (watermark, 0, 0, opacity, position),
         ], width, height, 0, images.PNG)
         return img
 
@@ -164,8 +166,12 @@ class ccPhotoRequestHandler(blobstore_handlers.BlobstoreDownloadHandler):
         image_data = memcache.get(key)
         if not image_data:
             blob_reader = blobstore.BlobReader(blob_key)
-            image_data = ccPhotoRequestHandler.create_watermark(blob_reader.read(),
-                watermark=model.SITE_SETTINGS.watermark_img)
+            image_data = ccPhotoRequestHandler.create_watermark(
+                blob_reader.read(),
+                watermark=model.SITE_SETTINGS.watermark_img,
+                position=model.SITE_SETTINGS.watermark_position,
+                opacity=model.SITE_SETTINGS.watermark_opacity
+                )
             blob_reader.close()
             if image_data:
                 try:
@@ -535,7 +541,11 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
 class AdminSettingsPage(ccRequestHandler):
     @requires_site_owner
     def get(self):
-        self.response.out.write(render_with_user_and_settings('admin.settings.html', {}))
+        from google.appengine.api.images import images_service_pb
+        watermark_positions = images_service_pb.CompositeImageOptions._ANCHOR_NAMES
+        self.response.out.write(render_with_user_and_settings('admin.settings.html', {
+            "watermark_positions": watermark_positions
+        }))
 
     @requires_site_owner
     def post(self):
@@ -553,10 +563,22 @@ class AdminSettingsPage(ccRequestHandler):
                 watermark = settings.get("watermark", "").strip()
                 settings["enable_watermark"] = False
                 if watermark:
-                    watermark_img = utils.get_watermark_img_from_google_chart(watermark)
+                    font_size = long(settings.get("watermark_size", 20))
+                    if font_size > 150:
+                        font_size = settings["watermark_size"] = 150
+                    opacity = float(settings.get("watermark_opacity", 0.4))
+                    if opacity > 1.0:
+                        settings["watermark_opacity"] = 1.0
+                    elif opacity < 0.0:
+                        settings["watermark_opacity"] = 0.0
+                    watermark_img = utils.get_watermark_img_from_google_chart(watermark, font_size)
                     if watermark_img:
                         settings["watermark_img"] = watermark_img
                         settings["enable_watermark"] = True
+                        memcache.flush_all()
+                    else:
+                        logging.exception("error in create watermark")
+
             model.SITE_SETTINGS.save_settings(**settings)
         elif default:
             model.DBSiteSettings.reset()

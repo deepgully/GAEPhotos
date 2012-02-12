@@ -13,9 +13,10 @@ $(document).ready(function() {
     });
     $("#watermark_enable").change(function(){
         if($(this).attr('checked')){
-            $("#watermark").show().focus();
+            $("#watermark_options").show()
+            $("#watermark").focus();
         } else {
-            $("#watermark").hide();
+            $("#watermark_options").hide();
         }
     });
     $("#block_referrers").change(function(){
@@ -77,8 +78,24 @@ $(document).ready(function() {
             <td>
                 <input type="checkbox" id="watermark_enable" name="enable_watermark"
                        {% if settings.enable_watermark %}checked{% endif %} />{{ _("Enable Watermark") }}
-                <br/><input id="watermark" name="watermark" type="text" size="18" value="{{ settings.watermark }}"
-                    {% if not settings.enable_watermark %}style="display: none;"{% endif %}/>
+                <br/>
+                <div id="watermark_options" {% if not settings.enable_watermark %}style="display: none;"{% endif %}>
+                    <input id="watermark" name="watermark" type="text" size="18" value="{{ settings.watermark }}"/>
+                    {{ _("Font Size") }}:
+                    <input id="watermark_size" name="watermark_size" type="text" size="5" value="{{ settings.watermark_size }}"/>px
+                    <br/>
+                    {{ _("Opacity") }}:
+                    <input id="watermark_opacity" name="watermark_opacity" type="text" size="2" value="{{ settings.watermark_opacity }}"/> (0.0 - 1.0)
+                    {{ _("Position") }}:
+                    <select id="watermark_position" name="watermark_position">
+                        {% for pos in watermark_positions %}
+                            <option value="{{ pos }}" {% if pos==settings.watermark_position %}selected="true"{% endif %}>
+                                {{ _(watermark_positions.get(pos)) }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
             </td>
        </tr>
         <tr>
