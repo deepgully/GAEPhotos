@@ -15,6 +15,7 @@ Installation
 * Download latest package from http://code.google.com/p/gaephotos/downloads/list
 * Unzip to local folder.
 * Change the first line in app.yaml:
+ 
     > original:   application: gaephotos
     >
     > changed to:  application: xxxxxx 
