@@ -5,16 +5,26 @@ import time
 import logging
 import jinja2
 import webapp2
+from datetime import datetime
 from webapp2_extras import json
 from functools import wraps
 from django.utils.encoding import force_unicode
 from google.appengine.api import users
 from google.appengine.ext import blobstore
 from google.appengine.api import memcache
+from google.appengine.api import urlfetch
 from google.appengine.ext.webapp import blobstore_handlers
+
+from google.appengine.api import conf
+APP_VERSION, CURRENT_CONFIG_VERSION, DEVELOPMENT = conf._inspect_environment()
+if DEVELOPMENT:
+    ENABLE_DEBUG = True
+else:
+    ENABLE_DEBUG = False
 
 import utils
 import model
+from lib.cc_cookies import CCCookiesWSGIMiddleware
 from lang import save_current_lang
 from lang import ugettext, ungettext, ccTranslations
 
@@ -22,7 +32,25 @@ _ = ugettext
 __ = ungettext
 
 def dateformat(value, format='%Y-%m-%d'):
-    return value.strftime(format)
+    return value and value.strftime(format) or "N/A"
+
+def filesizeformat(bytes):
+    """
+    Format the value like a 'human-readable' file size (i.e. 13 KB, 4.1 MB, 102
+    bytes, etc).
+    """
+    try:
+        bytes = float(bytes)
+    except TypeError:
+        return "0 bytes"
+
+    if bytes < 1024:
+        return "%d byte%s" % (bytes, bytes != 1 and 's' or '')
+    if bytes < 1024 * 1024:
+        return "%.1f KB" % (bytes / 1024)
+    if bytes < 1024 * 1024 * 1024:
+        return "%.1f MB" % (bytes / (1024 * 1024))
+    return "%.1f GB" % (bytes / (1024 * 1024 * 1024))
 
 jinja_env = jinja2.Environment(autoescape=True,
     loader=jinja2.FileSystemLoader(os.path.join(os.path.dirname(__file__), "templates")),
@@ -30,6 +58,7 @@ jinja_env = jinja2.Environment(autoescape=True,
 
 jinja_env.install_gettext_translations(ccTranslations())
 jinja_env.filters['date'] = dateformat
+jinja_env.filters['filesizeformat'] = filesizeformat
 
 logging.info("init jinja2")
 
@@ -116,6 +145,15 @@ class ccPhotoRequestHandler(blobstore_handlers.BlobstoreDownloadHandler):
     CACHE_TIME = 3600 * 24 * 30
     URL_PHOTO_NOT_FOUND = "/static/images/image_not_found.jpg"
     URL_BLOCKED_REFERRER = "/static/images/no_hotlinking.gif"
+
+    @staticmethod
+    def delete_photos_cache(albumname, photonames, types=["photo","thumb"]):
+        cache_keys = []
+        for t in types:
+            for name in photonames:
+                key = "photo_cache_%s_%s_%s" % (t, albumname, name)
+                cache_keys.append(key)
+        memcache.delete_multi(cache_keys)
 
     @staticmethod
     def get_blob_info_from_cache_or_db(albumname, photoname, type="photo"):
@@ -352,6 +390,7 @@ def ajax_delete_photos(album_name, photos):
     album = model.DBAlbum.get_album_by_name(album_name)
     if album:
         count = album.delete_photos_by_name(photo_names)
+        ccPhotoRequestHandler.delete_photos_cache(album_name, photo_names)
         res["status"] = "ok"
         res["count"] = count
     else:
@@ -381,14 +420,29 @@ def ajax_get_upload_url():
     return res
 
 
-@requires_site_login
-def ajax_create_comment(album_name, photo_name, comment):
+def ajax_create_comment(album_name, photo_name, comment, author):
     res = ERROR_RES.copy()
     user = users.get_current_user()
+    if model.SITE_SETTINGS.enable_anonymous_comment:
+        email = user and user.email() or "anonymous@unknown.com"
+        author = cgi.escape(author.strip())
+    else:
+        if not user:
+            raise Exception(_("You are not login"))
+        email = user.email()
+        author = user.nickname()
+
     comment = cgi.escape(comment.strip())
     if len(comment) > MAX_COMMENT:
         raise Exception(__("comment too long, max %0 chars", MAX_COMMENT))
-    comment = model.DBComment.create(album_name, photo_name, comment, author=user.nickname(), email=user.email())
+
+    photo = model.DBPhoto.get_photo_by_name(album_name=album_name, photo_name=photo_name)
+    if not photo:
+        raise Exception(_("photo not exist"))
+    if not photo.is_public and not check_admin_auth():
+        raise Exception(_("You are not authorized"))
+
+    comment = model.DBComment.create(album_name, photo_name, comment, author=author, email=email)
 
     key = "comment_%s_%s"%(album_name, photo_name)
     memcache.delete(key)
@@ -421,7 +475,6 @@ def ajax_delete_comment_by_id(comment_id):
         res["error"] = _("comment not exist")
     return res
 
-
 def ajax_get_comments(album_name, photo_name):
     res = ERROR_RES.copy()
     key = "comment_%s_%s"%(album_name, photo_name)
@@ -440,6 +493,65 @@ def ajax_get_comments(album_name, photo_name):
     res["comments"] = comments
     return res
 
+@requires_site_admin
+def ajax_add_web_photos(album_name, web_links):
+    from urlparse import urlparse
+    
+    def is_valid_link(url):
+        if not url:
+            return False
+        scheme = urlparse(url.strip())[0]
+        if scheme not in ("http", "https"):
+            return False
+        return True
+        
+    res = ERROR_RES.copy()
+    album = model.DBAlbum.get_album_by_name(album_name)
+    if not album:
+        res["error"] = _("album not exist")
+        return res
+
+    links = [url.split("==") for url in web_links.split('\n') if url and url.strip()]
+    if not links:
+        raise Exception(_("invalid url"))
+
+    photos = []
+    errors = []
+    for link in links:
+        url = link[0]
+        try:
+            if not is_valid_link(url):
+                raise Exception(_("invalid url"))
+            if len(link) > 1:
+                file_name = link[1].strip()
+            else:
+                file_name = "".join(urlparse(url)[1:3]).replace("/", "_")
+            photo = model.DBPhoto.get_photo_by_name(album_name, file_name)
+            if photo:
+                album.add_photo_to_album(photo)
+                raise Exception(_("photo already exists in this album"))
+
+            result = urlfetch.fetch(url)
+            if result.status_code != 200:
+                raise Exception(_("get file content error"))
+            if len(result.content) > model.SITE_SETTINGS.max_upload_size * 1024 * 1024:
+                raise Exception(_("file size exceeds"))
+            if utils.get_img_type(result.content) == utils.ImageMime.UNKNOWN:
+                raise Exception(_("unsupported file type"))
+            photo = model.DBPhoto.create(album_name, file_name, result.content, owner=users.get_current_user(),
+                                    public=album.public)
+            album.add_photo_to_album(photo)
+            photos.append(photo)
+        except Exception,e:
+            errors.append((url, force_unicode(e)))
+
+    res["status"] = "ok"
+    res["album"] = album.to_dict()
+    res["photos"] =  [p.to_dict() for p in photos]
+    res["errors"] = errors
+
+    return res
+
 AJAX_METHODS = {
     "create_album": ajax_create_album,
     "get_all_albums": ajax_get_all_albums,
@@ -455,22 +567,23 @@ AJAX_METHODS = {
     "delete_comments": ajax_delete_comments,
     "delete_comment_by_id": ajax_delete_comment_by_id,
     "create_comment": ajax_create_comment,
+    "add_web_photos": ajax_add_web_photos,
     }
 
 def dispatch(parameters):
     result = ERROR_RES.copy()
-    action = parameters.pop("action")
-    logging.info("ajax action: %s" % (action))
-    if action not in AJAX_METHODS:
-        result["status"] = "error"
-        result["error"] = _("unsupported method")
-    else:
-        try:
-            result = AJAX_METHODS[action](**parameters)
-        except Exception, e:
-            logging.exception("error in dispatch")
-            result["error"] = force_unicode(e)
+    try:
+        action = parameters.pop("action", None)
+        if action not in AJAX_METHODS:
             result["status"] = "error"
+            result["error"] = _("unsupported method")
+        else:
+            logging.info("ajax action: %s" % (action))
+            result = AJAX_METHODS[action](**parameters)
+    except Exception,e:
+        logging.exception("error in dispatch")
+        result["error"] = force_unicode(e)
+        result["status"] = "error"
     return json.encode(result)
 
 #admin pages
@@ -516,9 +629,10 @@ class AdminUploadPage(ccRequestHandler):
 
             photo = model.DBPhoto.get_photo_by_name(album_name, file_name)
             if photo:
+                album.add_photo_to_album(photo)
                 raise Exception(_("photo already exists in this album"))
             photo = model.DBPhoto.create(album_name, file_name, binary, owner=users.get_current_user(),
-                                        public=album.public)
+                                        public=album.public, site=self.request.host_url)
             album.add_photo_to_album(photo)
 
             result["status"] = "ok"
@@ -538,6 +652,76 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
         upload_files = self.get_uploads()
 
 
+GAE_RESPONSE_LIMIT = 30*1024*1024 # 30 M
+
+def create_zipfile_from_photos(photos):
+    import zipfile
+    from cStringIO import StringIO
+    buf = StringIO()
+    zfile = zipfile.ZipFile(buf, "w")
+    for photo in photos:
+        zfile.writestr(photo.photo_name, blobstore.BlobReader(photo.blob_key).read(), zipfile.ZIP_DEFLATED)
+    zfile.close()
+    return buf.getvalue()
+
+class AdminDownloadAlbum(ccRequestHandler):
+    @requires_site_admin
+    def get(self, albumname):
+        albumname = force_unicode(albumname)
+        album = model.DBAlbum.get_album_by_name(albumname)
+        if not album:
+            raise Exception(_("album not exist"))
+        photos = model.DBPhoto.get_by_key_name(album.photoslist)
+
+        totalsize = sum([photo.size for photo in photos])
+        if totalsize <= 0:
+            raise Exception(_("photo not exist"))
+        if totalsize < GAE_RESPONSE_LIMIT:
+            self.response.headers["Content-Type"] = "application/zip"
+            self.response.headers["Content-Disposition"]= "attachment;filename=%s.zip"%album.name.encode("utf-8")
+            self.response.out.write(create_zipfile_from_photos(photos))
+            model.DBAlbum.set_last_backup_time(albumname, datetime.now())
+        else:
+            photo_keyname_list = []
+            part = []
+            totalsize = 0
+            for photo in photos:
+                totalsize += photo.size
+                if totalsize < GAE_RESPONSE_LIMIT:
+                    part.append(photo.keyname)
+                else:
+                    photo_keyname_list.append(",".join(part))
+                    totalsize = photo.size
+                    part = [photo.keyname]
+            else:
+                photo_keyname_list.append(",".join(part))
+                
+            context = {"album": album,
+                       "photo_keyname_list": photo_keyname_list,
+            }
+            self.response.out.write(render_with_user_and_settings('download_album.html', context))
+
+class AdminDownloadPhotos(ccRequestHandler):
+    @requires_site_admin
+    def get(self):
+        photo_keyname = self.request.get("photos", "").split(",")
+        name = self.request.get("name", "photos")
+
+        photos = model.DBPhoto.get_by_key_name(photo_keyname)
+        totalsize = sum([photo.size for photo in photos])
+        if totalsize <= 0:
+            raise Exception(_("photo not exist"))
+        if totalsize < GAE_RESPONSE_LIMIT:
+            self.response.headers["Content-Type"] = "application/zip"
+            self.response.headers["Content-Disposition"]= "attachment;filename=%s.zip"%name.encode("utf-8")
+            self.response.out.write(create_zipfile_from_photos(photos))
+
+            model.DBAlbum.set_last_backup_time(photos[0].album_name, datetime.now())
+        else:
+            raise Exception("Response too large: %s, max is %s"%(totalsize,GAE_RESPONSE_LIMIT))
+
+    post = get
+
 class AdminSettingsPage(ccRequestHandler):
     @requires_site_owner
     def get(self):
@@ -556,6 +740,7 @@ class AdminSettingsPage(ccRequestHandler):
             settings = {}
             settings.update(self.request.POST)
             settings["enable_comment"] = bool(settings.get("enable_comment"))
+            settings["enable_anonymous_comment"] = bool(settings.get("enable_anonymous_comment"))
             settings["enable_watermark"] = bool(settings.get("enable_watermark"))
             settings["block_referrers"] = bool(settings.get("block_referrers"))
 
@@ -594,12 +779,27 @@ class LoginOutPage(ccRequestHandler):
     def get(self):
         self.redirect(users.create_logout_url(self.request.environ.get("HTTP_REFERER", "/")))
 
+class FeedPage(ccRequestHandler):
+    def get(self):
+        latestphotos = model.DBPhoto.get_latest_photos(model.SITE_SETTINGS.latest_photos_count)
+        if latestphotos:
+            last_updated = latestphotos[0].updatedate
+            last_updated = last_updated.strftime("%Y-%m-%dT%H:%M:%SZ")
+        else:
+            last_updated = "1900-01-01T00:00:00Z"
+        context = {"host_url": self.request.host_url,
+                   "latestphotos": latestphotos,
+                   "last_updated": last_updated,
+        }
+        self.response.headers['Content-Type'] = "application/atom+xml"
+        self.response.out.write(render_with_user_and_settings('atom.xml', context))
+    
 #photos pages
 class MainPage(ccRequestHandler):
     def get(self):
         lang = self.request.get("lang")
         if lang:
-            cookie = save_current_lang(lang, self.response)
+            save_current_lang(lang)
             self.redirect(self.request.environ.get("HTTP_REFERER", "/"))
         albums, albums_cursor = get_all_albums(pagesize=model.SITE_SETTINGS.albums_per_page)
 
@@ -657,12 +857,15 @@ class ThumbPage(ccPhotoRequestHandler):
     def get(self, albumname, photoname):
         self.send_photo(force_unicode(albumname), force_unicode(photoname), "thumb")
 
-RESERVED_ALBUM_NAME = [u'login', u'logout', u'admin', u'slider']
+RESERVED_ALBUM_NAME = [u'login', u'logout', u'admin', u'slider', u'feed']
 app = webapp2.WSGIApplication([
     (r'/', MainPage),
     (r'/login/', LoginPage),
     (r'/logout/', LoginOutPage),
+    (r'/feed/{0,1}', FeedPage),
     (r'/admin/ajax/', AdminAjaxPage),
+    (r'/admin/download/([^/]*?)/{0,1}', AdminDownloadAlbum),
+    (r'/admin/zipphotos/', AdminDownloadPhotos),
     (r'/admin/settings/', AdminSettingsPage),
     (r'/admin/blobupload/.*', UploadHandler),
     (r'/admin/upload/', AdminUploadPage),
@@ -670,7 +873,9 @@ app = webapp2.WSGIApplication([
     (r'/([^/]*?)/{0,1}', AlbumPage),
     (r'/([^/]*?)/([^/]*?)/thumb/{0,1}', ThumbPage),
     (r'/([^/]*?)/([^/]*?)', PhotoPage),
-], debug=True)
+], debug=ENABLE_DEBUG)
+
+app = CCCookiesWSGIMiddleware(app)
 
 def main():
     logging.info("call main()")

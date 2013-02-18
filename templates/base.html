@@ -17,7 +17,7 @@ Released   : 20071001
 <meta content="" name="keywords"/>
 <meta content="" name="description"/>
 <link type="text/css" rel="stylesheet" href="/static/styles/default.css"/>
-<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.min.js"></script>
+<script type="text/javascript" src="/static/js/jquery-1.4.4.min.js"></script>
 <script type="text/javascript" src="/static/js/jquery.blockUI.js"></script>
 <script type="text/javascript">
 String.prototype.format = function () {
@@ -28,13 +28,25 @@ String.prototype.escape = function () {
     var args = arguments;
     return this.replace(/</g, '').replace(/>/g, '');
 };
+formatfilesize = function(bytes){
+    var bytes = bytes.toFixed(2);
+    if(bytes<1024){
+        return "{0} bytes".format(bytes);
+    } else if(bytes<1024*1024){
+        return "{0} KB".format((bytes/(1024)).toFixed(1));
+    }else if(bytes<1024 * 1024 * 1024){
+        return "{0} MB".format((bytes/(1024 * 1024)).toFixed(1));
+    }
+    return "{0} GB".format((bytes/(1024 * 1024 * 1024)).toFixed(2));
+};
 formatutc = function(date, format){
     /*
      * eg:format="yyyy-MM-dd hh:mm:ss";
      */
     var matches = date.match(/\d+/g);
-    var date = new Date(matches[0],matches[1]-1,matches[2],matches[3],matches[4],matches[5], 0);
-    var localDate = date - date.getTimezoneOffset()*60;
+    var date = Date.UTC(matches[0],matches[1]-1,matches[2],matches[3],matches[4],matches[5], 0);
+    var temp = new Date();
+    var localDate = date - temp.getTimezoneOffset()*60;
     localDate = new Date(localDate);
     var o = {
         "M+" :  localDate.getMonth()+1,  //month
@@ -87,9 +99,21 @@ $(document).ready(function() {
                 }, "json");
     });
 {% endif %}
+    var ul = $('#dropmenu ul');
+    var ul_width = ul.width();
+    var ul_height = ul.height();
     $('#dropmenu').hover(
-            function() { $('ul', this).show(); },
-            function() { $('ul', this).hide(); }
+            function() {
+                var window_height = $(window).height();
+                var height_ratio = Math.ceil(ul_height/window_height);
+
+                ul.width(ul_width * height_ratio).height(ul_height / height_ratio + 8);
+                $('li', ul).each(function() {
+                    $(this).width(ul.width() * 0.95 / height_ratio);
+                    $(this).css({float:"left"});
+                });
+            },
+            function() { ul.width(ul_width).height(ul_height); }
     );
 });
 </script>
@@ -111,6 +135,7 @@ $(document).ready(function() {
         {% else %}
             <a href="/login/">{{ _('Login') }}</a>
         {% endif %}
+        | <a href="/feed/"><img src="/static/images/rss.gif" alt="RSS" class="no_border"></a>
     </div>
     </div>
 </div>
@@ -122,9 +147,7 @@ $(document).ready(function() {
             {% if allalbums %}
                 <ul>
                     {% for ab in allalbums %}
-                        <li><a href="/{{ab.name}}/">{{ab.name|truncate(20,True)}}
-                            {% if not ab.public %} ({{ _("private") }}) {% endif %}
-                        </a></li>
+                        <li><a href="/{{ab.name}}/">{{ab.name|truncate(20,True)}}{% if not ab.public %} ({{ _("private") }}) {% endif %}</a></li>
                     {% endfor %}
                 </ul>
             {% endif %}

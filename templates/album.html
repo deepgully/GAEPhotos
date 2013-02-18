@@ -63,6 +63,7 @@
             for(var i=0; i<count; i++){
                 _insert_thumb(photos[i], page);
             }
+            bind_details();
         };
         function _insert_thumb(photo, page){
             var thumb_div = $('<div class="mythumb" name="thumb"></div>');
@@ -80,8 +81,36 @@
             thumb_div.append($('<textarea maxlength="70" class="edit_description" rows="2" style="display: none;">{0}</textarea>'.format(photo.description)));
 
             $("#content").append(thumb_div);
+            var details = $('<div class="details">'+
+                    '<p>{{ _("Filename") }}: {0}</p>'.format(photo.photo_name)+
+                    '<p>{{ _("Owner") }}: {0}</p>'.format(photo.owner)+
+                    '<p>{{ _("Type") }}: {0}</p>'.format(photo.mime)+
+                    '<p>{{ _("Dimensions") }}: {0}x{1}</p>'.format(photo.width, photo.height)+
+                    '<p>{{ _("Size") }}: {0}</p>'.format(formatfilesize(photo.size))+
+                    '<p>{{ _("Date uploaded") }}: {0}</p>'.format(formatutc(photo.createdate, 'yyyy-MM-dd'))+
+                    '</div>');
+            $("#content").append(details);
             thumb_div.fadeIn(1000);
         };
+
+        var bind_details = function() {
+            $(".mythumb").each(function(){
+                var thumb = $(this);
+                thumb.find ("img").unbind("hover");
+                thumb.find ("img").hover(function(evt){
+                    var details = thumb.next(".details");
+                    var img = thumb.find ("img");
+                    details.css({
+                        left: img.position().left + "px",
+                        top:  img.position().top + img.height()  + "px"
+                    });
+                    details.show();
+                },function(){
+                    thumb.next(".details").hide();
+                });
+            });
+        };
+        bind_details();
         {% if users.is_admin %}
         var get_selected_photos  = function() {
             var selected_photos = new Array();
@@ -117,7 +146,7 @@
                 $.growlUI("{{ _('Please select photo') }}", "");
                 return;
             }
-            $("#page").block({ message: $('#deletequestion'), css: { padding: '15px' } });
+            $("#page").block({ message: $('#deletequestion'), css: { padding: '15px', width: '600px' } });
         });
         $('#deleteno').click( function() {$("#page").unblock(); });
         $('#deleteyes').click(function() {
@@ -197,6 +226,10 @@
     <li><a id="deleteselected"> {{ _('Delete Selected') }} </a></li>
     <li>|</li>
     <li><a id="setcover"> {{ _('Set CoverPhoto') }} </a></li>
+    <li>|</li>
+    <li><a id="backup" title="{{ _('Last Backup') }}:{{ album.lastbackupdate|date }}" href="/admin/download/{{album.name}}/" target="_blank">
+        {{ _('Backup Album') }}
+    </a></li>
     {% endif %}
 {% endblock %}
    
@@ -227,6 +260,14 @@
                                 {% endif %}
                             </div>
                             <textarea maxlength="70" class="edit_description" rows="2" style="display: none;">{{photo.description}}</textarea>
+                        </div>
+                        <div class="details">
+                            <p>{{ _("Filename") }}: {{ photo.photo_name }}</p>
+                            <p>{{ _("Owner") }}: {{ photo.owner }}</p>
+                            <p>{{ _("Type") }}: {{ photo.mime }}</p>
+                            <p>{{ _("Dimensions") }}: {{photo.width}}x{{photo.height}}</p>
+                            <p>{{ _("Size") }}: {{ photo.size|filesizeformat }}</p>
+                            <p>{{ _("Date uploaded") }}: {{ photo.createdate|date }}</p>
                         </div>
                     {% endfor %}
                 {% endif %}

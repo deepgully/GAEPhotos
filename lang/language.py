@@ -11,6 +11,7 @@ from django.utils import simplejson
 from django.utils.encoding import force_unicode
 
 from langs_table import lang_table
+from lib import cc_cookies
 
 DEFAULT_LANG = 'en-us'
 COOKIE_NAME = 'gaephotos-language'
@@ -38,7 +39,7 @@ def get_current_lang():
         save_current_lang(lang)
     return lang
 
-def save_current_lang(lang, response=None):
+def save_current_lang(lang):
     if not isinstance(lang, unicode):
         lang = force_unicode(lang)
     if not lang_table.has_key(lang):
@@ -49,10 +50,7 @@ def save_current_lang(lang, response=None):
     cookie[COOKIE_NAME] = simplejson.dumps(lang)
     cookie[COOKIE_NAME]['expires'] = now[:-4] + str(int(now[-4:])+1) + ' GMT'
     cookie[COOKIE_NAME]['path'] = '/'
-    if response != None:
-        response.headers.add_header('Set-Cookie', str(cookie).split(': ')[1])
-    else:
-        print(cookie)
+    cc_cookies.add_cookie(cookie)
     return cookie
 
 def find_msg_index(msg):

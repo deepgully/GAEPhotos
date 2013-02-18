@@ -48,7 +48,7 @@ a img {
 
 #logo h1 {
     float: left;
-    padding-top: 10px;
+    padding-top: 6px;
     font-size: 2.5em;
 }
 
@@ -86,6 +86,10 @@ a img {
     color: #FFFFFF;
 }
 
+.no_border {
+    border: none;
+    vertical-align: middle;
+}
 /* Menu */
 #menu {
     width: 98%;
@@ -103,7 +107,7 @@ a img {
 #menu li {
     display: block;
     float: left;
-    padding: 8px 0px 0 0px;
+    padding: 8px 0px 0px 0px;
 }
 
 #menu a {
@@ -120,10 +124,7 @@ a img {
 
 #dropmenu ul {
     display: none;
-}
-
-#dropmenu:hover ul {
-    display: block;
+    min-width: 60px;
     position: absolute;
     float: none;
     border: 1px solid black;
@@ -133,8 +134,19 @@ a img {
     z-index: 200;
 }
 
+#dropmenu:hover ul {
+    display: block;
+}
+
 #dropmenu li {
     float: none;
+    width: 95%;
+    border-left: 1px solid #dddddd;
+    padding-left: 4px;
+}
+
+#dropmenu a {
+    white-space: nowrap;
 }
 
 /* Navigation */
@@ -236,9 +248,11 @@ a img {
     font-weight: normal;
     font-style: italic;
     cursor: text;
+    width: 90%;
 }
 .edit_description {
     border: 1px solid #ffa500;
+    width: 85%;
 }
 .description2 {
     font-weight: normal;
@@ -279,6 +293,18 @@ a img {
 .selectedphotos {
     float: left;
 }
+.details {
+    display: none;
+    position: absolute;
+    font-size: 0.8em;
+    background-color:#eeeeee;
+    border: solid 1px #cccccc;
+    border-radius: 6px;
+    -moz-border-radius: 6px;
+    -webkit-border-radius: 6px;
+    z-index: 999;
+    padding: 4px;
+}
 /* Photo */
 #photo {
     width: 700px;
@@ -297,6 +323,9 @@ a img {
 #slider {
     float: right;
     width: 240px;
+}
+.image-details {
+    color: #888;
 }
 
 /* Photo Nav */
@@ -379,6 +408,12 @@ a img {
     width: 100%;
     padding-top: 2px;
     text-align: left;
+}
+#comment_author {
+    border: 1px solid #cccccc;
+    float: left;
+    margin-left: 10px;
+    width: 160px;
 }
 #new_comment {
     border: 1px solid #cccccc;
@@ -563,8 +598,8 @@ fieldset {
 }
 
 #albumlist ul {
-    margin: 0px;
-    padding: 0px;
+    margin: 0;
+    padding: 0;
     list-style: none;
     text-align: left;
 }
@@ -598,7 +633,7 @@ fieldset {
 #admin_table img {
     max-width: 80px;
     max-height: 60px;
-    flaot: left;
+    float: left;
 }
 
 #coverphoto_select {
@@ -612,6 +647,16 @@ fieldset {
 }
 
 #tips {
+    overflow: hidden;
+    font: message-box;
+    background-color: InfoBackground;
+    border: 1px solid #C5B270;
+    position: relative;
+    padding: 3px;
+    font-size: 1em;
+}
+
+.tips {
     overflow: hidden;
     font: message-box;
     background-color: InfoBackground;

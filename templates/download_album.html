@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+ 
+{% block page %}
+	<div class="error">{{_("Download album partially due to GAE limitation")}}:
+        {% for photos in photo_keyname_list %}
+            &nbsp;&nbsp;<a href="/admin/zipphotos/?photos={{photos}}&name={{album.name}}.part{{loop.index}}" target="_blank">part{{loop.index}} </a>
+        {% endfor %}
+    </div>
+    <div style="clear: both;">&nbsp;</div>
+{% endblock %}

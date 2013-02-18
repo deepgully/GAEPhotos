@@ -18,6 +18,19 @@ indexes:
 
 - kind: DBComment
   properties:
+  - name: photo_key_name
+  - name: date
+    direction: desc
+
+- kind: DBComment
+  properties:
+  - name: photo_key_name
+  - name: public
+  - name: date
+    direction: desc
+
+- kind: DBComment
+  properties:
   - name: public
   - name: date
     direction: desc
@@ -26,4 +39,10 @@ indexes:
   properties:
   - name: public
   - name: createdate
+    direction: desc
+
+- kind: DBPhoto
+  properties:
+  - name: public
+  - name: updatedate
     direction: desc

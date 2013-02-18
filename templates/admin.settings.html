@@ -6,9 +6,10 @@
 $(document).ready(function() {
     $("#enable_comment").change(function(){
         if($(this).attr('checked')){
-            $("#latest_comments_count").show().focus();
+            $("#comment_options").show();
+            $("#latest_comments_count").focus();
         } else {
-            $("#latest_comments_count").hide();
+            $("#comment_options").hide();
         }
     });
     $("#watermark_enable").change(function(){
@@ -64,8 +65,12 @@ $(document).ready(function() {
             <th scope="row">{{ _("Latest Comments Count") }}:</th>
             <td><input type="checkbox" id="enable_comment" name="enable_comment"
                        {% if settings.enable_comment %}checked{% endif %} />{{ _("Enable Comments") }}
-                <br/><input id="latest_comments_count" name="latest_comments_count" type="text" size="20" value="{{settings.latest_comments_count}}"
-                   {% if not settings.enable_comment %}style="display: none;"{% endif %}/>
+                <br/>
+                <div id="comment_options" {% if not settings.enable_comment %}style="display: none;"{% endif %}>
+                <input id="latest_comments_count" name="latest_comments_count" type="text" size="20" value="{{settings.latest_comments_count}}"/>
+                <br/><input type="checkbox" id="enable_anonymous_comment" name="enable_anonymous_comment"
+                           {% if settings.enable_anonymous_comment %}checked{% endif %} />{{ _("Enable Anonymous Comments") }}
+                </div>
             </td>
        </tr>
        <tr>

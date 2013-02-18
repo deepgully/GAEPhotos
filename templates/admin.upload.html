@@ -56,17 +56,17 @@
     function add_file_to_queue(f){
         var photo_key_name = 'dbphoto/{0}/{1}'.format(album_name, f.name);
         if ($.inArray(photo_key_name, album_photoslist) != -1){
-            $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1} M, {2}</li>'.format(
-                    f.name, (f.size/1000/1000).toFixed(2), "{{ _('photo already exists in this album') }}"));
+            $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1}, {2}</li>'.format(
+                    f.name, formatfilesize(f.size), "{{ _('photo already exists in this album') }}"));
             return false;
         }
         if (f.size/1000/1000 > {{ settings.max_upload_size }}){
-            $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1} M, {2}</li>'.format(
-                    f.name, (f.size/1000/1000).toFixed(2), "{{ _('file size exceeds') }}"));
+            $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1}, {2}</li>'.format(
+                    f.name, formatfilesize(f.size), "{{ _('file size exceeds') }}"));
             return false;
         } else {
-            $("#upload_files_container").append('<li name="{0}"> {0}, {1} M, {2}</li>'.format(
-                    f.name, (f.size/1000/1000).toFixed(2), "{{ _('uploading') }}..."));
+            $("#upload_files_container").append('<li name="{0}"> {0}, {1}, {2}</li>'.format(
+                    f.name, formatfilesize(f.size), "{{ _('uploading') }}..."));
             return true;
         }
     };
@@ -80,19 +80,36 @@
         uploadreader.readAsBinaryString(f);
     };
 
-    function processXHR(file, binary){
-        var file_uploader = $("#upload_files_container li[name='{0}']".format(file.name));
-        var progress_bar = $('<div class="progress">0%</div>');
+    function add_process_bar(file_uploader, text){
+        var progress_bar = $('<div class="progress" name="{0}" style="display: none;">{1}</div>'.format(
+                file_uploader.attr("name"), text));
         progress_bar.height(file_uploader.outerHeight());
         progress_bar.offset({top: file_uploader.offset().top,
             left: file_uploader.offset().left});
         file_uploader.parent().append(progress_bar);
+        return progress_bar;
+    }
+
+    function re_layout(){
+        var prog_bars = $(".progress");
+        prog_bars.each(function(i, prog){
+            var prog = $(prog);
+            var uploader = $("#upload_files_container li[name='{0}']".format(prog.attr("name")));
+            prog.offset({top: uploader.offset().top,
+                left: uploader.offset().left});
+        });
+    }
+
+    function processXHR(file, binary){
+        var file_uploader = $("#upload_files_container li[name='{0}']".format(file.name));
+        var progress_bar = add_process_bar(file_uploader, "0%");
         progress_bar.show();
+        re_layout();
 
         var xhr = new XMLHttpRequest();
         xhr.upload.addEventListener("progress", function(event) {
             if (event.lengthComputable) {
-                var percentage = Math.round((event.loaded * 100) / event.total);
+                var percentage = Math.round((event.loaded * 100) / event.total) - 1;
                 progress_bar.width(file_uploader.outerWidth() * percentage/100);
                 progress_bar.text(percentage+'%');
                 if (percentage >= 100) {
@@ -115,6 +132,8 @@
                     if (resp.status=='ok'){
                         file_uploader.html("{0}, {1} M, {2}".format(resp.file_name,
                                 (file.size/1000/1000).toFixed(2), "{{ _('Done') }}"));
+                        progress_bar.width(file_uploader.outerWidth());
+                        progress_bar.text("{{ _('Done') }}");
                     } else {
                         progress_bar.text('{{ _("Error") }} ' + resp.error);
                         progress_bar.addClass("error");
@@ -135,6 +154,60 @@
         if(xhr.sendAsBinary) xhr.sendAsBinary(binary);
         else xhr.send(file);
     };
+    $(document).ready(function() {
+        $("#add_web_photos").click(function(){
+            re_layout();
+            $("#page").block({ message: $('#web_photos'), css: { width: '600px' } });
+        });
+        $('#web_cancel').click(function() {
+            $("#page").unblock();
+            re_layout();
+        });
+        $('#web_submit').click(function(){
+            var links =  $("#web_links").val().replace(/(^\s*)|(\s*$)/g, "")
+            if(links.length <=0 ){
+                $.growlUI('{{ _("Pls input photo url") }}');
+                return false;
+            }
+            $("#upload_files_container").empty();
+            $("#divStatus").html("");
+            $("#web_photos").block({ message: $('#uploading'), css: { width: '400px' } });
+
+            album_name = $("#albumsSelect").val();
+            $.post('/admin/ajax/',
+                {'action': 'add_web_photos',
+                 'album_name': album_name,
+                 'web_links': links
+                },
+                function(res){
+                    $("#web_photos").unblock();
+                    re_layout();
+                    if (res.status=='ok') {
+                        $.growlUI("{0} {{ _('Photos Uploaded') }}".format(res.photos.length),
+                                "{0} {{ _('Error') }}".format(res.errors.length));
+                        $("#page").unblock();
+
+                        $("#divStatus").html( "{0} {{ _('Photos Uploaded') }}  {1} {{ _('Error') }}".format(res.photos.length,
+                            res.errors.length) );
+                        
+                        $.each(res.errors, function(index, error) {
+                            $("#upload_files_container").append('<li name="{0}" class="error"> {0}, {1}</li>'.format(
+                                   error[0], error[1]));
+                        });
+
+                        $.each(res.photos, function(index, photo) {
+                            $("#upload_files_container").append('<li name="{0}"> {0}, {1}, {2}</li>'.format(
+                                photo.photo_name, formatfilesize(photo.size), "{{ _('Done') }}"));
+                            var file_uploader = $("#upload_files_container li[name='{0}']".format(photo.photo_name));
+                            add_process_bar(file_uploader, "{{ _('Done') }}").width(file_uploader.outerWidth()).show();
+                        });
+                        re_layout();
+                    } else {
+                        alert('error: '+res.error);
+                    }
+                }, "json");
+        });
+    });
 </script>
 {% endblock %}
 
@@ -144,7 +217,7 @@
 {% endblock %}
 
 {% block page %}
-    <div id="tips">{{ _("Support Firefox and Chrome, no IE") }}</div><div style="clear: both;"></div>
+    <div class="tips">{{ _("Support Firefox and Chrome, no IE") }}</div><div style="clear: both;"></div>
 {% if albums %}
     <div id="div_selectphoto">{{ _("Select Album") }}:
         <select id="albumsSelect">
@@ -155,7 +228,9 @@
     </div>
     <div id="div_button">
         <input id="filesToUpload" type="file" multiple="true" accept="image/*" onchange="upload_files();"/>
+        <input id="add_web_photos" type="button" value="{{ _('Add from Web') }}"/>
     </div>
+    <div style="clear: both;"></div>
     <div id="divStatus"></div>
     <div style="clear: both;"></div>
     <div class="fieldset" id="fsUploadProgress">
@@ -166,4 +241,18 @@
     <a id="btncreate" href="javascript:;">{{ _("Create Album") }}</a>
 {% endif %}
 <div style="clear: both;"></div>
+<div id="web_photos" style="display:none; cursor: default;">
+    <h2>{{ _('Add photos from urls') }}</h2>
+    <div class="tips">{{ _('one url per line') }}</div>
+    <div class="tips">{{ _('default photo name is full url path, use url==your_name to custom photo name') }}</div>
+    <textarea id="web_links" rows="8" style="width: 96%;"></textarea>
+    <div style="clear: both;"></div>
+    <div style="padding: 5px;">
+        <input id="web_submit" type="submit" value="{{ _('Upload') }}">
+        <input id="web_cancel" type="submit" value="{{ _('Cancel') }}">
+    </div>
+</div>
+<div id="uploading" style="display:none; cursor: default;">
+    <h2><img src="/static/images/uploading.gif" />{{ _('Uploading') }}...</h2>
+</div>
 {% endblock %}

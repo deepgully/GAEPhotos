@@ -15,7 +15,7 @@ logging.info("init db cache")
 def get(keys, **kwargs):
     keys, multiple = datastore.NormalizeAndTypeCheckKeys(keys)
     ret = db.get([key for key in keys if key not in _db_get_cache], **kwargs)
-    if (len(ret) == 1) and (ret[0] == None):
+    if (len(ret) == 1) and (ret[0] == None) and (not multiple):
         return
     _db_get_cache.update(dict([(x.key(), x) for x in ret if x is not None]))
     ret = [_db_get_cache.get(k, None) for k in keys]
@@ -46,8 +46,16 @@ class BaseModel(db.Model):
     db_parent = BASEMODEL_PARENT
 
     @property
+    def str_key(self):
+        return str(self.key())
+
+    @property
     def id(self):
         return self.key().id()
+
+    @property
+    def keyname(self):
+        return self.key().name()
 
     def save_settings(self, **kwds):
         props = self.properties()
@@ -148,6 +156,7 @@ class DBSiteSettings(BaseModel):
     latest_comments_count = db.IntegerProperty(default=8)
     max_upload_size = db.FloatProperty(default=2.0)  #max size(M)
     enable_comment = db.BooleanProperty(default=True)
+    enable_anonymous_comment = db.BooleanProperty(default=False)
     enable_watermark = db.BooleanProperty(default=False)
     watermark = db.StringProperty(default="@GAEPhotos")
     watermark_size = db.IntegerProperty(default=20)
@@ -200,6 +209,7 @@ class DBAlbum(BaseModel):
     public = db.BooleanProperty(default=True)
     createdate = db.DateTimeProperty(auto_now_add=True)
     updatedate = db.DateTimeProperty(auto_now=True)
+    lastbackupdate = db.DateTimeProperty()
     photoslist = db.ListProperty(str)
     coverphoto = db.StringProperty(default="")
 
@@ -237,6 +247,13 @@ class DBAlbum(BaseModel):
         key_name = cls.gen_key_name(albumname=name)
         return cls.get_by_key_name(key_name, parent=cls.db_parent)
 
+    @classmethod
+    def set_last_backup_time(cls, name, time):
+        album = cls.get_album_by_name(name)
+        if album:
+            album.lastbackupdate = time
+            album.save()
+
     @property
     def photocount(self):
         return len(self.photoslist)
@@ -251,10 +268,14 @@ class DBAlbum(BaseModel):
 
     def add_photo_to_album(self, photo):
         photo_key_name = photo.key().name()
-        if photo_key_name not in self.photoslist:
-            self.photoslist.insert(0, photo_key_name)
-            self.save()
-        return self
+        def txn():
+            album = DBAlbum.get_album_by_name(self.name)
+            if photo_key_name not in album.photoslist:
+                album.photoslist.insert(0, photo_key_name)
+                album.save()
+            return album
+
+        return db.run_in_transaction(txn)
 
     def remove(self):
         photos = DBPhoto.get_by_key_name(self.photoslist)
@@ -341,6 +362,7 @@ class DBAlbum(BaseModel):
             "public": self.public,
             "createdate": self.createdate.isoformat(),
             "updatedate": self.updatedate.isoformat(),
+            "lastbackupdate": self.lastbackupdate and self.lastbackupdate.isoformat() or "",
             "photoslist": self.photoslist,
             "cover_url": self.cover_url,
             "photocount": self.photocount,
@@ -355,7 +377,10 @@ class DBPhoto(BaseModel):
     owner = db.UserProperty()
     mime = db.StringProperty()
     size = db.IntegerProperty()
+    width = db.IntegerProperty(default=0)
+    height = db.IntegerProperty(default=0)
     createdate = db.DateTimeProperty(auto_now_add=True)
+    updatedate = db.DateTimeProperty(auto_now=True)
     description = db.StringProperty(multiline=True, default="")
     blob_key = db.StringProperty()
     thumb_blob_key = db.StringProperty()
@@ -363,15 +388,22 @@ class DBPhoto(BaseModel):
 
     @property
     def url(self):
-        return "%s/%s/%s" % (self.site, self.album_name, self.photo_name)
+        return "/%s/%s" % (self.album_name, self.photo_name)
 
     @property
     def thumb_url(self):
-        return "%s/%s/%s/thumb/" % (self.site, self.album_name, self.photo_name)
+        return "/%s/%s/thumb/" % (self.album_name, self.photo_name)
 
     @property
-    def isPublic(self):
+    def is_public(self):
         return self.public
+
+    @property
+    def Comments(self):
+        try:
+            return DBComment.get_comments(self.album_name, self.photo_name).order("-date")
+        except:
+            return DBComment.get_comments(self.album_name, self.photo_name)
 
     def remove(self):
         blobstore.delete(self.blod_key)
@@ -387,9 +419,13 @@ class DBPhoto(BaseModel):
     @classmethod
     def get_latest_photos(cls, count, is_admin=False):
         if is_admin:
-            return cls.all().order("-createdate").fetch(count)
+            query = cls.all()
         else:
-            return cls.all().order("-createdate").filter("public =", True).fetch(count)
+            query = cls.all().filter("public =", True)
+        try:
+            return query.order("-updatedate").fetch(count)
+        except:
+            return query.order("-createdate").fetch(count)
 
     @classmethod
     def get_names_from_key_name(cls, key_name):
@@ -421,9 +457,12 @@ class DBPhoto(BaseModel):
         photo.size = len(binary)
         mime_type = utils.get_img_type(binary)
         photo.mime = mime_type
-        blob_key = utils.create_blob_file(mime_type, binary)
+        img = images.Image(binary)
+        photo.width = img.width
+        photo.height = img.height
         thumb = images.resize(binary, 280, 210, images.JPEG)
-        thumb_blob_key = utils.create_blob_file(utils.ImageMime.JPEG, thumb)
+        blob_key = utils.create_blob_file(mime_type, binary, u"%s_%s"%(album_name,file_name))
+        thumb_blob_key = utils.create_blob_file(utils.ImageMime.JPEG, thumb, u"thumb_%s_%s"%(album_name,file_name))
         photo.blob_key = str(blob_key)
         photo.thumb_blob_key = str(thumb_blob_key)
         photo.save()
@@ -435,9 +474,12 @@ class DBPhoto(BaseModel):
             "album_name": self.album_name,
             "owner": (self.owner and self.owner.nickname()) or "",
             "createdate": self.createdate.isoformat(),
+            "updatedate": self.updatedate.isoformat(),
             "description": self.description,
             "mime": self.mime,
             "size": self.size,
+            "width": self.width,
+            "height": self.height,
             "url": self.url,
             "thumb_url": self.thumb_url,
             "public": self.public,
@@ -461,10 +503,11 @@ class DBComment(BaseModel):
         comment = cls(parent=cls.db_parent, photo_key_name=key_name, content=content,
             public=photo.public, **kwds)
         comment.save()
+        photo.save()
         return comment
 
     @classmethod
-    def get_comments(cls, album_name, photo_name, public=None):
+    def get_comments(cls, album_name, photo_name, public=True):
         photo_key_name = DBPhoto.gen_key_name(album_name=album_name, photo_name=photo_name)
         if public:
             return cls.all().filter("photo_key_name =", photo_key_name).filter("public =", True)
@@ -488,11 +531,15 @@ class DBComment(BaseModel):
         return None
 
     @classmethod
-    def get_latest_comments(cls, count, public=None):
+    def get_latest_comments(cls, count, public=True):
         if public:
-            return cls.all().filter("public =", True).order("-date").fetch(count)
+            query = cls.all().filter("public =", True)
         else:
-            return cls.all().order("-date").fetch(count)
+            query = cls.all()
+        try:
+            return query.order("-date").fetch(count)
+        except:
+            return query.fetch(count)
 
     @property
     def avatar_url(self):

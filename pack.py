@@ -41,8 +41,8 @@ Package_Name = "GAEPhotos_v%s.zip"%(VERSION)
 Base_Path = os.path.abspath(os.path.dirname(os.path.realpath(__file__))) 
 
 included_exts = ["*.*"]
-excluded_exts = ["*.pyc","*.svn"]
-excluded_files = ["pack.py",Package_Name]   
+excluded_exts = ["*.pyc","*.svn","*.idea"]
+excluded_files = ["pack.py",Package_Name]
     
 def package():
     zfile = zipfile.ZipFile(os.path.join(Base_Path,Package_Name), mode='w')
@@ -56,7 +56,7 @@ def package():
     
 def writefiletozipwithrule(filepath, zfile):
     print('packing file %s'%filepath)
-    shortname = filepath.replace(Base_Path+'\\','')
+    shortname = os.path.split(filepath)[1]
     if shortname not in excluded_files:
         shortname = filepath.replace(Base_Path,'')
         zfile.write(filepath, shortname, zipfile.ZIP_DEFLATED)        

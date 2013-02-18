@@ -53,8 +53,6 @@
                 syncTransitions:           true,
                 defaultTransitionDuration: 900,
                 onSlideChange:             function(prevIndex, nextIndex) {
-                    $("#original_photo").attr('href', this.data[nextIndex].slideUrl);
-
                     $('#thumbs ul.thumbs').children()
                             .eq(prevIndex).fadeTo('fast', onMouseOutOpacity).end()
                             .eq(nextIndex).fadeTo('fast', 1.0);
@@ -139,14 +137,36 @@
 
 
         {% if settings.enable_comment %}
+            {% if not settings.enable_anonymous_comment %}
+                {% if not users.cur_user %}
+                    $("#comment_author").hide();
+                    $("#new_comment").hide();
+                    $("#submit_comment").hide();
+                    $("#submit_comment").parent().append("<a href='/login/'>{{ _('Login to Comment') }}</a>");
+                {% else %}
+                    $("#comment_author").attr("disabled", true);
+                {% endif %}
+            {% endif %}
+            $("#comment_author").focusin(function(){
+                gallery.unbind_key();
+            });
+            $("#comment_author").focusout(function(){
+                gallery.bind_key();
+            });
             $("#new_comment").focusin(function(){
                 $(this).attr("rows", 3);
+                $("#comment_author").show();
                 gallery.unbind_key();
             });
             $("#new_comment").focusout(function(){
                 gallery.bind_key();
             });
             $("#submit_comment").click(function(){
+                var author = $("#comment_author").val().replace(/(^\s*)|(\s*$)/g, "").escape();
+                if(author.length <=0 ){
+                    $.growlUI('{{ _("Pls input name") }}');
+                    return false;
+                }
                 var comment = $("#new_comment").val().replace(/(^\s*)|(\s*$)/g, "").escape();
                 if(comment.length <=0 ){
                     $.growlUI('{{ _("Pls input content") }}');
@@ -159,13 +179,15 @@
                     {'action': 'create_comment',
                      'album_name': album_name,
                      'photo_name': photo_name,
-                     'comment': comment
+                     'comment': comment,
+                     'author': author
                     },
                     function(res){
                         if (res.status=='ok') {
                             insert_comment(res.comment);
                             $("#new_comment").attr("rows", 1);
                             $("#new_comment").val("");
+                            $("#comment_author").hide();
                             $.growlUI("{{ _('Comment Added') }}", "");
                         } else {
                             alert('error: '+res.error);
@@ -176,6 +198,7 @@
                 $("#comment_list").empty();
                 $("#new_comment").attr("rows", 1);
                 $("#new_comment").val("");
+                $("#comment_author").hide();
             };
             function get_all_comments(album_name, photo_name){
                 $.post('/admin/ajax/',
@@ -241,8 +264,6 @@
 
 {% block commandbar %}
     <li>|</li>
-    <li><a id="original_photo" target="_blank" href="#">{{ _('Original Photo') }}</a></li>
-    <li>|</li>
     <li><a id="copylink" href="javascript:;">{{ _('Copy Photo Link') }}</a></li>
 {% endblock %}
 
@@ -261,7 +282,17 @@
                             <img src="/{{ photo.album_name }}/{{photo.photo_name}}/thumb/" alt="{{photo.description}}" />
                         </a>
                         <div class="caption">
-                            <div class="image-desc">{{photo.description}}</div>
+                            <div class="image-desc">{{photo.description}}
+                                <a id="original_photo" target="_blank" href="/{{ photo.album_name }}/{{photo.photo_name}}">
+                                    {{ _('Original Photo') }}
+                                </a>
+                            </div>
+                            <div class="image-details">
+                            {{ _("Owner") }}: {{ photo.owner }} |
+                            {{ _("Dimensions") }}: {{photo.width}}x{{photo.height}} |
+                            {{ _("Size") }}: {{ photo.size|filesizeformat }} |
+                            {{ _("Date uploaded") }}: {{ photo.createdate|date }}
+                            </div>
                         </div>
                     </li>
                 {% endfor %}
@@ -290,7 +321,11 @@
             </li>
             <div id="comment_list">
             </div>
-            <textarea name="new_comment" id="new_comment" rows="1" maxlength="140"></textarea><br/>
+            <input type="text" name="comment_author" id="comment_author" style="display: none"
+                   value="{{ users.cur_user and users.cur_user.nickname() or 'anonymous' }}"/>
+            <div style="clear: both;"></div>
+            <textarea name="new_comment" id="new_comment" rows="1" maxlength="140"></textarea>
+            <div style="clear: both;"></div>
             <button id="submit_comment">{{ _('submit comment') }}</button>
         </div>
         {% endif %}

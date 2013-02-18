@@ -4,7 +4,7 @@ import logging
 from time import gmtime
 from datetime import datetime
 
-VERSION = "1.01"
+VERSION = "1.03"
 
 def _dump_date(d, delim):
     """Used for `http_date` and `cookie_date`."""
@@ -62,9 +62,9 @@ def get_img_type(binary):
     else:
         return ImageMime.UNKNOWN
 
-def create_blob_file(mime_type, binary):
+def create_blob_file(mime_type, binary, filename="blob_filename"):
     from google.appengine.api import files
-    blob_file_name = files.blobstore.create(mime_type=mime_type)
+    blob_file_name = files.blobstore.create(mime_type=mime_type, _blobinfo_uploaded_filename=filename)
     with files.open(blob_file_name, 'a') as f:
         f.write(binary)
     files.finalize(blob_file_name)
